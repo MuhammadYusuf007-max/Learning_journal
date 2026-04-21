@@ -33,6 +33,7 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     # My apps
     'learning_logs',
+    'accounts',
     # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -104,6 +105,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
+
+LOGIN_REDIRECT_URL = 'learning_logs:index'
 
 LANGUAGE_CODE = 'en-us'
 
