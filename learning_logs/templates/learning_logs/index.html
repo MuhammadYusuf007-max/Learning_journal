@@ -1,5 +1,16 @@
 {% extends 'learning_logs/base.html' %}
 
-{% block content %}
-<p>Learning Log helps you keep track of your learning, for any topic you're interested in.</p>
-{% endblock content %}
+{% block page_header %}
+<div class="p-3 mb-4 bg-light border rounded-3">
+    <div class="container-fluid py-3">
+        <h1 class="display-3">Track your learning journey.</h1>
+
+    <p class="lead">Make your own Learning Blog, and keep a list of the topics you're learning about. 
+        Whenever you learn something new, you'll have a space to write a short entry about 
+        it. Over time, you'll build a valuable record of what you've learned.</p>
+    
+    <a class="btn btn-primary btn-lg mt-1"
+     href="{% url 'accounts:register' %}">Register for an Account</a>
+    </div>
+</div>
+{% endblock page_header %}
