@@ -7,6 +7,7 @@
     {% load django_bootstrap5 %}
     {% bootstrap_css %}
     {% bootstrap_javascript %}
+    {% block extra_head %}{% endblock extra_head %}
 </head>
 <body>
 
@@ -68,4 +69,5 @@
 </main>
  
 </body>
+{% block extra_js %}{% endblock extra_js %}
 </html>

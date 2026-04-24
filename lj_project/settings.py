@@ -37,6 +37,7 @@ INSTALLED_APPS = [
 
     # Third-party apps
     'django_bootstrap5',
+    'markdownify.apps.MarkdownifyConfig',
 
     # Django apps
     'django.contrib.admin',
@@ -127,3 +128,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Markdownify settings
+MARKDOWNIFY = {
+    "default": {
+        "WHITELIST_TAGS": [
+            "a", "p", "h1", "h2", "h3", "h4", "h5", "h6", "h7",
+            "ul", "li", "ol", "strong", "em", "b", "i", "code", "pre", "blockquote",
+            "img", "hr"
+        ],
+        "WHITELIST_ATTRS": [
+            "href", "src", "alt", "class", "title"
+        ]
+    }
+}
