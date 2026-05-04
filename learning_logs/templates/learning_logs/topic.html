@@ -1,32 +1,40 @@
 {% extends 'learning_logs/base.html' %}
 {% load markdownify %}
 
-{% block page_header %}
-    <h1>{{ topic.text }}</h1>
-{% endblock page_header %}
-
 {% block content %}
-    <p>
-        <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-primary btn-sm mb-2">Add new entry</a>
-        <a href="{% url 'learning_logs:edit_topic' topic.id %}" class="btn btn-secondary btn-sm mb-2">Edit topic</a>
-        <a href="{% url 'learning_logs:delete_topic' topic.id %}" class="btn btn-danger btn-sm mb-2">Delete topic</a>
-    </p>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ topic.text }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 mt-3 gap-3">
+        <h1 class="fw-bold text-primary mb-0">{{ topic.text }}</h1>
+        
+        <div class="btn-group shadow-sm">
+            <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-success fw-bold">+ Add Entry</a>
+            <a href="{% url 'learning_logs:edit_topic' topic.id %}" class="btn btn-outline-secondary">Edit Topic</a>
+            <a href="{% url 'learning_logs:delete_topic' topic.id %}" class="btn btn-outline-danger">Delete</a>
+        </div>
+    </div>
+
+    <div class="entries-container mt-4">
         {% for entry in entries %}
-            <div class="card mb-3">
-                <!-- The header contains the date and a link to edit the entry -->
-                <h4 class="card-header">
-                    {{ entry.date_added|date:'d M, Y H:i' }}
-                <small><a href="{% url 'learning_logs:edit_entry' entry.id %}">
-                    edit entry</a></small>
-                </h4>
-                <!-- Card body with entry text -->
-                <div class="card-body">
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center border-bottom pb-2 pt-3">
+                    <span class="text-secondary fw-bold">{{ entry.date_added|date:'d M, Y H:i' }}</span>
+                    <a href="{% url 'learning_logs:edit_entry' entry.id %}" class="btn btn-sm btn-outline-secondary">Edit Entry</a>
+                </div>
+                <div class="card-body fs-5 text-dark p-4">
                     {{ entry.text|markdownify }}
                 </div>
-            </div>   
-            
+            </div>
         {% empty %}
-            <li>No entries have been added yet.</li>
+            <div class="alert alert-light border shadow-sm text-center p-5">
+                <p class="fs-5 text-muted mb-3">No entries have been added for this topic yet.</p>
+                <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-primary">Write your first entry</a>
+            </div>
         {% endfor %}
-    </ul>
+    </div>
 {% endblock content %}

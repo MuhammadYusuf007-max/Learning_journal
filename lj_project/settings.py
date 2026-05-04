@@ -34,7 +34,8 @@ INSTALLED_APPS = [
     # My apps
     'learning_logs',
     'accounts',
-
+    'ckeditor',
+    
     # Third-party apps
     'django_bootstrap5',
     'markdownify.apps.MarkdownifyConfig',

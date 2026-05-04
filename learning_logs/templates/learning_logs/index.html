@@ -1,16 +1,42 @@
 {% extends 'learning_logs/base.html' %}
 
-{% block page_header %}
-<div class="p-3 mb-4 bg-light border rounded-3">
-    <div class="container-fluid py-3">
-        <h1 class="display-3">Track your learning journey.</h1>
-
-    <p class="lead">Make your own Learning Blog, and keep a list of the topics you're learning about. 
-        Whenever you learn something new, you'll have a space to write a short entry about 
-        it. Over time, you'll build a valuable record of what you've learned.</p>
-    
-    <a class="btn btn-primary btn-lg mt-1"
-     href="{% url 'accounts:register' %}">Register for an Account</a>
+{% block content %}
+    <div class="p-5 mb-5 bg-light border-0 rounded-4 shadow-sm text-center">
+        <div class="container-fluid py-4">
+            <h1 class="display-4 fw-bold text-primary mb-3">Track your learning journey.</h1>
+            <p class="lead text-muted fs-4 mb-4 mx-auto" style="max-width: 800px;">
+                Make your own Learning Blog, and keep a list of the topics you're learning about. 
+                Whenever you learn something new, you'll have a space to write a short entry about it. 
+                Over time, you'll build a valuable record of what you've learned.
+            </p>
+            
+            {% if user.is_authenticated %}
+                <a class="btn btn-primary btn-lg mt-2 px-5 rounded-pill shadow-sm fw-bold" href="{% url 'learning_logs:topics' %}">View My Topics</a>
+            {% else %}
+                <a class="btn btn-primary btn-lg mt-2 px-5 rounded-pill shadow-sm fw-bold" href="{% url 'accounts:register' %}">Register for an Account</a>
+                <a class="btn btn-outline-primary btn-lg mt-2 ms-2 px-5 rounded-pill fw-bold" href="{% url 'accounts:login' %}">Log In</a>
+            {% endif %}
+        </div>
     </div>
-</div>
-{% endblock page_header %}
+
+    <div class="row mt-5 text-center px-3">
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm p-4 bg-white">
+                <h4 class="fw-bold mb-3">📝 Document</h4>
+                <p class="text-muted">Quickly jot down notes, thoughts, and code snippets using our rich-text editor.</p>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm p-4 bg-white">
+                <h4 class="fw-bold mb-3">🗂️ Organize</h4>
+                <p class="text-muted">Group your entries by topic so you can easily review your progress over time.</p>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm p-4 bg-white border-bottom border-primary border-3">
+                <h4 class="fw-bold mb-3 text-primary">🤖 AI Powered</h4>
+                <p class="text-muted">Automatically generate insights and summaries of your notes using AI integration.</p>
+            </div>
+        </div>
+    </div>
+{% endblock content %}

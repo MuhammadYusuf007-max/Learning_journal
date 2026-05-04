@@ -1,22 +1,21 @@
 {% extends 'learning_logs/base.html' %}
 
-{% block page_header %}
-    <h1>Topics</h1>
-{% endblock page_header %}
-
 {% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold text-primary mb-0">My Topics</h2>
+        <a href="{% url 'learning_logs:new_topic' %}" class="btn btn-success shadow-sm fw-bold">+ Add New Topic</a>
+    </div>
 
-<ul class="'list-group border-bottom pb-2 mb-4">
-    {% for topic in topics %}
-        <li class="list-group-item border-0"> 
-            <a href="{% url 'learning_logs:topic' topic.id %}">
-                {{ topic.text }}
+    <div class="list-group shadow-sm mb-4">
+        {% for topic in topics %}
+            <a href="{% url 'learning_logs:topic' topic.id %}" class="list-group-item list-group-item-action p-4 d-flex justify-content-between align-items-center border-start-0 border-end-0 border-top-0">
+                <span class="fs-5 fw-semibold">{{ topic.text }}</span>
+                <span class="text-muted small">View Entries &rarr;</span>
             </a>
-        </li>
-    {% empty %}
-        <li class="list-group-item border-0">No topics have been added yet.</li>
-    {% endfor %}
-
-    <a href="{% url 'learning_logs:new_topic' %}">Add a new topic</a> 
-    
+        {% empty %}
+            <div class="alert alert-info border-0 shadow-sm text-center p-5">
+                <p class="mb-0 fs-5">No topics have been added yet. Start your learning journey!</p>
+            </div>
+        {% endfor %}
+    </div>
 {% endblock content %}

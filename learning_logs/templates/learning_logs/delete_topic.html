@@ -1,17 +1,29 @@
 {% extends 'learning_logs/base.html' %}
 
 {% block content %}
-    <p><a href="{% url 'learning_logs:topic' topic.id %}">{{ topic.text }}</a></p>
-    
-    <div class="alert alert-danger">
-        <h4>Delete Topic</h4>
-        <p>Are you sure you want to delete the topic "<strong>{{ topic.text }}</strong>"?</p>
-        <p><strong>Warning:</strong> This will also delete all entries associated with this topic.</p>
-        
-        <form action="{% url 'learning_logs:delete_topic' topic.id %}" method='post'>
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger">Confirm Delete</button>
-            <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-secondary">Cancel</a>
-        </form>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Delete Topic</li>
+        </ol>
+    </nav>
+
+    <div class="card border-danger mt-4 shadow-sm">
+        <div class="card-header bg-danger text-white fw-bold">
+            Delete Topic Confirmation
+        </div>
+        <div class="card-body p-4">
+            <h5 class="card-title">Are you sure you want to delete "{{ topic.text }}"?</h5>
+            <p class="card-text text-muted mb-4">
+                <strong>Warning:</strong> This action cannot be undone. All journal entries associated with this topic will also be permanently deleted.
+            </p>
+            
+            <form action="{% url 'learning_logs:delete_topic' topic.id %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger px-4 fw-bold me-2">Confirm Delete</button>
+                <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">Cancel</a>
+            </form>
+        </div>
     </div>
 {% endblock content %}

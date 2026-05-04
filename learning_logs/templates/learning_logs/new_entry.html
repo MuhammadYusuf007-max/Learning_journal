@@ -1,34 +1,40 @@
-{% extends "learning_logs/base.html" %}
+{% extends 'learning_logs/base.html' %}
 
 {% block extra_head %}
 <style>
-    /* Ensure CKEditor is tall enough */
-    .ck-editor__editable_inline {
-        min-height: 200px;
+    /* Ensure the Django CKEditor widget expands properly inside the Bootstrap card */
+    .django-ckeditor-widget {
+        width: 100%;
     }
 </style>
 {% endblock extra_head %}
 
 {% block content %}
-    <p><a href="{% url 'learning_logs:topic' topic.id %}">{{ topic }}</a></p>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Add New Entry</li>
+        </ol>
+    </nav>
 
-    <p>Add a new entry:</p>
-    <form action="{% url 'learning_logs:new_entry' topic.id %}" method='post' novalidate>
-        {% csrf_token %}
-        {{ form.as_div }}
-        <button type="submit">Add entry</button>
-    </form>
+    <div class="card shadow-sm border-0 bg-light mt-4">
+        <div class="card-body p-4">
+            <h3 class="card-title mb-4 fw-bold text-primary">Add a New Entry</h3>
+            
+            <form action="{% url 'learning_logs:new_entry' topic.id %}" method="post" novalidate>
+                {% csrf_token %}
+                
+                <div class="mb-4">
+                    {{ form.media }}
+                    {{ form.as_div }}
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="submit" name="submit" class="btn btn-primary px-4 fw-bold">Save Entry</button>
+                    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
 {% endblock content %}
-
-{% block extra_js %}
-<script src="https://cdn.ckeditor.com/ckeditor5/40.0.0/classic/ckeditor.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        ClassicEditor
-            .create( document.querySelector( 'textarea' ) )
-            .catch( error => {
-                console.error( error );
-            } );
-    });
-</script>
-{% endblock extra_js %}

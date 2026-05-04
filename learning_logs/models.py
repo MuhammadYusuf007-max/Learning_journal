@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from ckeditor.fields import RichTextField
 
 class Topic(models.Model):
     """A topic the user is learning about."""
@@ -14,7 +15,8 @@ class Topic(models.Model):
 class Entry(models.Model):
     """Something the user learned about a topic."""
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
-    text = models.TextField()
+    text = RichTextField()  # Upgraded for CKEditor
+    ai_summary = models.TextField(blank=True, null=True)  # New field to store the AI's summary
     date_added = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -22,7 +24,9 @@ class Entry(models.Model):
 
     def __str__(self):
         """Return a string representation of the model."""
-        if len(self.text) > 50:
-            return f"{self.text[:50]}..."
+        # Strip HTML tags just for the string representation preview (optional but helpful)
+        preview_text = self.text.replace('<p>', '').replace('</p>', '')
+        if len(preview_text) > 50:
+            return f"{preview_text[:50]}..."
         else:
-            return self.text
+            return preview_text

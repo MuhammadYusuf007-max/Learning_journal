@@ -1,13 +1,30 @@
 {% extends 'learning_logs/base.html' %}
 
 {% block content %}
-    <p><a href="{% url 'learning_logs:topic' topic.id %}">{{ topic.text }}</a></p>
-    
-    <p>Edit topic:</p>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Edit Topic</li>
+        </ol>
+    </nav>
 
-    <form action="{% url 'learning_logs:edit_topic' topic.id %}" method='post'>
-        {% csrf_token %}
-        {{ form.as_div }}
-        <button type="submit" class="btn btn-primary">Save changes</button>
-    </form>
+    <div class="card shadow-sm border-0 bg-light mt-4">
+        <div class="card-body p-4">
+            <h3 class="card-title mb-4 fw-bold text-primary">Edit Topic</h3>
+
+            <form action="{% url 'learning_logs:edit_topic' topic.id %}" method="post">
+                {% csrf_token %}
+                
+                <div class="mb-4">
+                    {{ form.as_div }}
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary px-4 fw-bold">Save Changes</button>
+                    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
 {% endblock content %}
