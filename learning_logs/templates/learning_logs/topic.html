@@ -7,7 +7,9 @@
 
 {% block content %}
     <p>
-        <a href="{% url 'learning_logs:new_entry' topic.id %}">Add new entry</a>
+        <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-primary btn-sm mb-2">Add new entry</a>
+        <a href="{% url 'learning_logs:edit_topic' topic.id %}" class="btn btn-secondary btn-sm mb-2">Edit topic</a>
+        <a href="{% url 'learning_logs:delete_topic' topic.id %}" class="btn btn-danger btn-sm mb-2">Delete topic</a>
     </p>
         {% for entry in entries %}
             <div class="card mb-3">
