@@ -1,0 +1,41 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block content %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">AI Summary</li>
+        </ol>
+    </nav>
+
+    <div class="row mt-4">
+        <div class="col-md-10 offset-md-1">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
+                    <h3 class="mb-0">🤖 Master Learning Summary</h3>
+                    <div class="btn-group">
+                        <a href="?export=pdf" class="btn btn-light btn-sm fw-bold">
+                             Download PDF
+                        </a>
+                        <a href="?export=docx" class="btn btn-light btn-sm fw-bold">
+                             Download Word
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <h4 class="text-muted mb-4 border-bottom pb-2">Topic: {{ topic.text }}</h4>
+                    
+                    <div class="summary-content fs-5 leading-relaxed text-dark">
+                        {{ summary|linebreaks }}
+                    </div>
+                </div>
+                <div class="card-footer bg-light text-center py-3">
+                    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">
+                        Back to Journal Entries
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock content %}

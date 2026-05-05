@@ -1,48 +1,59 @@
 import os
+import io
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import Http404
+from django.http import Http404, FileResponse, HttpResponse
+from django.template.defaultfilters import striptags
 
 from .models import Topic, Entry
 from .forms import TopicForm, EntryForm
 
-# --- AI SETUP START ---
-# Load the secret keys from the .env file
-load_dotenv()
+# Libraries for file export
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import simpleSplit
+from docx import Document
 
-# Set up the AI client to talk to Groq's free servers
+# --- AI SETUP ---
+load_dotenv()
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
 
-def generate_ai_summary(entry_text):
-    """Sends the journal text to the AI and returns a 1-sentence summary."""
+def generate_ai_summary(text, is_master=False):
+    """
+    Helper to talk to Groq. 
+    If is_master is True, it provides a longer 3-paragraph summary.
+    If False, it provides a 1-sentence takeaway.
+    """
+    system_prompt = "You are a helpful academic assistant."
+    user_prompt = f"Summarize this journal entry in exactly one short sentence: {text}"
+    
+    if is_master:
+        user_prompt = f"Provide a cohesive 3-paragraph summary of the following learning progress: {text}"
+
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant", # <-- THIS IS THE ONLY LINE WE CHANGED
+            model="llama-3.1-8b-instant",
             messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a helpful assistant. Summarize the following journal entry in exactly one short, concise sentence. Do not include any conversational filler."
-                },
-                {
-                    "role": "user", 
-                    "content": entry_text
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ]
         )
         return response.choices[0].message.content
     except Exception as e:
         print(f"AI Error: {e}")
-        return "AI Summary temporarily unavailable."
+        return "Summary temporarily unavailable."
+
+# --- VIEWS ---
 
 def index(request):
     """The home page for Learning Log"""
-    return render(request, 'learning_logs/index.html')  
+    return render(request, 'learning_logs/index.html')
 
 @login_required
 def topics(request):
@@ -54,138 +65,140 @@ def topics(request):
 @login_required
 def topic(request, topic_id):
     """Show a single topic and all its entries."""
-    topic = Topic.objects.get(id=topic_id)
-    # Make sure the topic belongs to the current user.
-    if topic.owner != request.user:
-        raise Http404
-    
-    #Get all the entries related to this topic
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     entries = topic.entry_set.order_by('-date_added')
     context = {'topic': topic, 'entries': entries}
     return render(request, 'learning_logs/topic.html', context)
 
 @login_required
+def topic_summary(request, topic_id):
+    """Generates a master summary and handles PDF/Docx exports."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+    entries = topic.entry_set.all().order_by('date_added')
+    
+    # Combine entries for the AI
+    raw_text = " ".join([striptags(e.text) for e in entries])
+    summary_text = generate_ai_summary(raw_text, is_master=True)
+
+    export_format = request.GET.get('export')
+
+    # Handle Word Export
+    if export_format == 'docx':
+        doc = Document()
+        doc.add_heading(f'Learning Summary: {topic.text}', 0)
+        doc.add_paragraph(summary_text)
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return FileResponse(buffer, as_attachment=True, filename=f'{topic.text}_summary.docx')
+
+    # Handle PDF Export
+    elif export_format == 'pdf':
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+        
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(72, height - 72, f"Learning Summary: {topic.text}")
+        
+        p.setFont("Helvetica", 12)
+        text_object = p.beginText(72, height - 100)
+        
+        # Wrapping text so it doesn't go off the page
+        lines = simpleSplit(summary_text, "Helvetica", 12, width - 144)
+        for line in lines:
+            if text_object.getY() < 72: # Create new page if full
+                p.drawText(text_object)
+                p.showPage()
+                p.setFont("Helvetica", 12)
+                text_object = p.beginText(72, height - 72)
+            text_object.textLine(line)
+            
+        p.drawText(text_object)
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+        return FileResponse(buffer, as_attachment=True, filename=f'{topic.text}_summary.pdf')
+
+    return render(request, 'learning_logs/topic_summary.html', {
+        'topic': topic,
+        'summary': summary_text
+    })
+
+@login_required
 def new_topic(request):
     """Add a new topic."""
     if request.method != 'POST':
-        # No data submitted; create a blank form.
         form = TopicForm()
     else:
-        # POST data submitted; process the data.
         form = TopicForm(data=request.POST)
         if form.is_valid():
             new_topic = form.save(commit=False)
             new_topic.owner = request.user
             new_topic.save()
             return redirect('learning_logs:topics')
-    
-    # Display a blank or invalid form.
     context = {'form': form}
     return render(request, 'learning_logs/new_topic.html', context)
 
 @login_required
 def new_entry(request, topic_id):
-    """Add a new entry for a particular topic."""
-    topic = Topic.objects.get(id=topic_id)
-
-    # Make sure the topic belongs to the current user.
-    if topic.owner != request.user:
-        raise Http404
-
+    """Add a new entry for a topic."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     if request.method != 'POST':
-        # No data submitted; create a blank form.
         form = EntryForm()
     else:
-        # POST data submitted; process the data.
         form = EntryForm(data=request.POST)
         if form.is_valid():
             new_entry = form.save(commit=False)
             new_entry.topic = topic
-            
-            # --- ✨ AI INTEGRATION START ✨ ---
-            # Clean up the CKEditor HTML tags so the AI doesn't get confused
-            clean_text = new_entry.text.replace('<p>', '').replace('</p>', '')
-            
-            # Generate the summary and assign it to the new database field
+            # Clean text and summarize
+            clean_text = striptags(new_entry.text)
             new_entry.ai_summary = generate_ai_summary(clean_text)
-            # --- ✨ AI INTEGRATION END ✨ ---
-
             new_entry.save()
             return redirect('learning_logs:topic', topic_id=topic_id)
-    
-    # Display a blank or invalid form.
-    context = {'topic': topic, 'form':form}
+    context = {'topic': topic, 'form': form}
     return render(request, 'learning_logs/new_entry.html', context)
 
 @login_required
 def edit_entry(request, entry_id):
     """Edit an existing entry."""
-    entry = Entry.objects.get(id=entry_id)
+    entry = get_object_or_404(Entry, id=entry_id)
     topic = entry.topic
-    
-    #Make sure the topic belongs to the current user.
     if topic.owner != request.user:
         raise Http404
 
     if request.method != 'POST':
-        # Initial request; pre-fill form with the current entry
         form = EntryForm(instance=entry)
     else:
-        # POST data submitted; process data
         form = EntryForm(instance=entry, data=request.POST)
         if form.is_valid():
             edited_entry = form.save(commit=False)
-            
-            # --- ✨ AI INTEGRATION START ✨ ---
-            # Clean up the CKEditor HTML tags
-            clean_text = edited_entry.text.replace('<p>', '').replace('</p>', '')
-            
-            # Generate a new summary based on the edited text
+            clean_text = striptags(edited_entry.text)
             edited_entry.ai_summary = generate_ai_summary(clean_text)
-            # --- ✨ AI INTEGRATION END ✨ ---
-            
             edited_entry.save()
             return redirect('learning_logs:topic', topic_id=topic.id)
-
-    context = {'entry':entry, 'topic':topic, 'form':form}
+    context = {'entry': entry, 'topic': topic, 'form': form}
     return render(request, 'learning_logs/edit_entry.html', context)
 
 @login_required
 def edit_topic(request, topic_id):
     """Edit an existing topic."""
-    topic = Topic.objects.get(id=topic_id)
-    
-    #Make sure the topic belongs to the current user.
-    if topic.owner != request.user:
-        raise Http404
-
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     if request.method != 'POST':
-        # Initial request; pre-fill form with the current topic
         form = TopicForm(instance=topic)
     else:
-        # POST data submitted; process data
         form = TopicForm(instance=topic, data=request.POST)
         if form.is_valid():
             form.save()
             return redirect('learning_logs:topic', topic_id=topic.id)
-
-    context = {'topic':topic, 'form':form}
+    context = {'topic': topic, 'form': form}
     return render(request, 'learning_logs/edit_topic.html', context)
 
 @login_required
 def delete_topic(request, topic_id):
     """Delete an existing topic."""
-    topic = Topic.objects.get(id=topic_id)
-    
-    #Make sure the topic belongs to the current user.
-    if topic.owner != request.user:
-        raise Http404
-
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     if request.method == 'POST':
-        # Delete the topic and redirect to topics page
         topic.delete()
         return redirect('learning_logs:topics')
-
-    # If GET, show confirmation page
-    context = {'topic':topic}
-    return render(request, 'learning_logs/delete_topic.html', context)
+    return render(request, 'learning_logs/delete_topic.html', {'topic': topic})

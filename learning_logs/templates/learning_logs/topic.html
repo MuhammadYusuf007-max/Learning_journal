@@ -10,12 +10,35 @@
     </nav>
 
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 mt-3 gap-3">
-        <h1 class="fw-bold text-primary mb-0">{{ topic.text }}</h1>
+        <div>
+            <h1 class="fw-bold text-primary mb-0">{{ topic.text }}</h1>
+            <p class="text-muted mb-0 small">Created: {{ topic.date_added|date:'M d, Y' }}</p>
+        </div>
         
-        <div class="btn-group shadow-sm">
-            <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-success fw-bold">+ Add Entry</a>
-            <a href="{% url 'learning_logs:edit_topic' topic.id %}" class="btn btn-outline-secondary">Edit Topic</a>
-            <a href="{% url 'learning_logs:delete_topic' topic.id %}" class="btn btn-outline-danger">Delete</a>
+        <div class="d-flex gap-2 align-items-center">
+            <div class="btn-group shadow-sm">
+                <a href="{% url 'learning_logs:topic_summary' topic.id %}" class="btn btn-primary fw-bold">
+                    🤖 AI Summary
+                </a>
+                <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow">
+                    <li><h6 class="dropdown-header">Export Options</h6></li>
+                    <li><a class="dropdown-item" href="{% url 'learning_logs:topic_summary' topic.id %}?export=pdf">
+                        <i class="bi bi-file-pdf"></i> Download PDF
+                    </a></li>
+                    <li><a class="dropdown-item" href="{% url 'learning_logs:topic_summary' topic.id %}?export=docx">
+                        <i class="bi bi-file-word"></i> Download Word (.docx)
+                    </a></li>
+                </ul>
+            </div>
+
+            <div class="btn-group shadow-sm">
+                <a href="{% url 'learning_logs:new_entry' topic.id %}" class="btn btn-success fw-bold">+ Add Entry</a>
+                <a href="{% url 'learning_logs:edit_topic' topic.id %}" class="btn btn-outline-secondary">Edit</a>
+                <a href="{% url 'learning_logs:delete_topic' topic.id %}" class="btn btn-outline-danger">Delete</a>
+            </div>
         </div>
     </div>
 
@@ -23,8 +46,10 @@
         {% for entry in entries %}
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center border-bottom pb-2 pt-3">
-                    <span class="text-secondary fw-bold">{{ entry.date_added|date:'d M, Y H:i' }}</span>
-                    <a href="{% url 'learning_logs:edit_entry' entry.id %}" class="btn btn-sm btn-outline-secondary">Edit Entry</a>
+                    <span class="text-secondary fw-bold small">
+                        <i class="bi bi-calendar-event"></i> {{ entry.date_added|date:'d M, Y H:i' }}
+                    </span>
+                    <a href="{% url 'learning_logs:edit_entry' entry.id %}" class="btn btn-sm btn-link text-decoration-none">Edit Entry</a>
                 </div>
                 
                 <div class="card-body fs-5 text-dark p-4">
@@ -34,11 +59,13 @@
                             <span class="fs-4 me-2">🤖</span> 
                             <strong class="text-primary">AI Key Takeaway:</strong>
                         </div>
-                        <p class="mb-0 fs-6 text-dark">{{ entry.ai_summary }}</p>
+                        <p class="mb-0 fs-6 text-dark italic">{{ entry.ai_summary }}</p>
                     </div>
                     {% endif %}
                     
-                    {{ entry.text|markdownify }}
+                    <div class="entry-content">
+                        {{ entry.text|markdownify }}
+                    </div>
                 </div>
             </div>
         {% empty %}
