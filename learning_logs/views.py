@@ -1,5 +1,7 @@
 import os
 import io
+import json
+import re
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -9,8 +11,9 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import Http404, FileResponse, HttpResponse
 from django.template.defaultfilters import striptags
+from django.utils import timezone
 
-from .models import Topic, Entry
+from .models import Topic, Entry, QuizAttempt
 from .forms import TopicForm, EntryForm
 
 # Libraries for file export
@@ -77,6 +80,75 @@ def generate_ai_content(text, mode="summary"):
         user_msg = f"Summarize this in one short sentence: {text}"
 
     return _call_ai(system_msg, user_msg)
+
+
+def generate_ai_quiz_json(notes_text, num_questions=5):
+    """
+    Ask the AI for a structured multiple-choice quiz in JSON form.
+    Returns a list of question dicts, or an empty list on failure.
+    """
+    MAX_NOTES_CHARS = 12000
+    if len(notes_text) > MAX_NOTES_CHARS:
+        notes_text = notes_text[:MAX_NOTES_CHARS]
+
+    system_msg = (
+        "You are a strict but fair tutor that creates multiple-choice quizzes. "
+        "You MUST respond with ONLY a valid JSON array, no prose, no markdown fences. "
+        "Each item must have exactly these keys: question (string), options (array of "
+        "exactly 4 strings), correct_index (integer 0-3), explanation (short string)."
+    )
+    user_msg = (
+        f"Create exactly {num_questions} multiple-choice questions based ONLY on the "
+        f"notes below. Each question must have 4 options. Indicate the correct answer "
+        f"by its index (0-3). Add a one-sentence explanation.\n\n"
+        f"NOTES:\n{notes_text}\n\n"
+        f"Return JSON only."
+    )
+
+    raw = _call_ai(system_msg, user_msg)
+    if not raw or raw.startswith("AI features disabled"):
+        return []
+
+    # Strip optional ```json fences the model may add despite instructions.
+    cleaned = raw.strip()
+    fence_match = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    # If the model added prose before/after, try to extract the first JSON array.
+    if not cleaned.startswith('['):
+        bracket_match = re.search(r"\[\s*\{.*\}\s*\]", cleaned, re.DOTALL)
+        if bracket_match:
+            cleaned = bracket_match.group(0)
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        print(f"Quiz JSON parse error: {e}\nRaw: {raw[:500]}")
+        return []
+
+    # Validate shape and keep only well-formed items.
+    valid = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        q = item.get('question')
+        opts = item.get('options')
+        ci = item.get('correct_index')
+        expl = item.get('explanation', '')
+        if (
+            isinstance(q, str) and q.strip()
+            and isinstance(opts, list) and len(opts) == 4
+            and all(isinstance(o, str) for o in opts)
+            and isinstance(ci, int) and 0 <= ci <= 3
+        ):
+            valid.append({
+                'question': q.strip(),
+                'options': [o.strip() for o in opts],
+                'correct_index': ci,
+                'explanation': str(expl).strip(),
+            })
+    return valid
 
 
 def generate_ai_qa(context_text, question):
@@ -355,17 +427,106 @@ def search(request):
 
 @login_required
 def topic_quiz(request, topic_id):
-    """Generates ONLY a quiz based on the topic entries."""
+    """Start a new quiz attempt: generate questions, save, then redirect to take it."""
     topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     entries = topic.entry_set.all()
-    
-    # Combine entries and strip HTML
-    raw_text = " ".join([striptags(e.text) for e in entries])
-    
-    # Call the AI specifically for a Quiz
-    quiz_questions = generate_ai_content(raw_text, mode="quiz")
 
-    return render(request, 'learning_logs/topic_quiz.html', {
+    if not entries.exists():
+        messages.warning(request, 'Add at least one entry before taking a quiz.')
+        return redirect('learning_logs:topic', topic_id=topic.id)
+
+    raw_text = " ".join(striptags(e.text) for e in entries)
+    questions = generate_ai_quiz_json(raw_text, num_questions=5)
+
+    if not questions:
+        messages.error(request, "Couldn't generate a quiz right now. Please try again in a moment.")
+        return redirect('learning_logs:topic', topic_id=topic.id)
+
+    attempt = QuizAttempt.objects.create(
+        user=request.user,
+        topic=topic,
+        questions_data=questions,
+        total=len(questions),
+    )
+    return redirect('learning_logs:take_quiz', attempt_id=attempt.id)
+
+
+@login_required
+def take_quiz(request, attempt_id):
+    """Display the quiz form and grade it on submit."""
+    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user)
+
+    if attempt.completed:
+        return redirect('learning_logs:quiz_result', attempt_id=attempt.id)
+
+    if request.method == 'POST':
+        answers = []
+        score = 0
+        for i, q in enumerate(attempt.questions_data):
+            raw = request.POST.get(f'q_{i}')
+            try:
+                picked = int(raw) if raw is not None else None
+            except (TypeError, ValueError):
+                picked = None
+            answers.append(picked)
+            if picked == q.get('correct_index'):
+                score += 1
+
+        attempt.answers_data = answers
+        attempt.score = score
+        attempt.completed = True
+        attempt.completed_at = timezone.now()
+        attempt.save()
+        messages.success(request, f'You scored {score} / {attempt.total} ({attempt.percentage}%).')
+        return redirect('learning_logs:quiz_result', attempt_id=attempt.id)
+
+    return render(request, 'learning_logs/take_quiz.html', {
+        'attempt': attempt,
+        'topic': attempt.topic,
+    })
+
+
+@login_required
+def quiz_result(request, attempt_id):
+    """Show the graded results for a completed quiz attempt."""
+    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user)
+
+    if not attempt.completed:
+        return redirect('learning_logs:take_quiz', attempt_id=attempt.id)
+
+    # Build a list of {question, options, correct_index, picked, explanation, is_correct}
+    review = []
+    for i, q in enumerate(attempt.questions_data):
+        picked = attempt.answers_data[i] if i < len(attempt.answers_data) else None
+        review.append({
+            'index': i,
+            'question': q.get('question', ''),
+            'options': q.get('options', []),
+            'correct_index': q.get('correct_index'),
+            'picked': picked,
+            'explanation': q.get('explanation', ''),
+            'is_correct': picked == q.get('correct_index'),
+        })
+
+    return render(request, 'learning_logs/quiz_result.html', {
+        'attempt': attempt,
+        'topic': attempt.topic,
+        'review': review,
+    })
+
+
+@login_required
+def quiz_history(request, topic_id):
+    """List the user's past quiz attempts on a topic."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+    attempts = QuizAttempt.objects.filter(user=request.user, topic=topic, completed=True)
+
+    best = max((a.percentage for a in attempts), default=0)
+    avg = round(sum(a.percentage for a in attempts) / len(attempts), 1) if attempts else 0
+
+    return render(request, 'learning_logs/quiz_history.html', {
         'topic': topic,
-        'quiz': quiz_questions
+        'attempts': attempts,
+        'best': best,
+        'avg': avg,
     })

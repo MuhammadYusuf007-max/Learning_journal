@@ -1,0 +1,90 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Quiz history</li>
+        </ol>
+    </nav>
+    <h2>📈 Quiz history: <span class="text-primary">{{ topic.text }}</span></h2>
+{% endblock page_header %}
+
+{% block content %}
+
+{% if attempts %}
+    <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+            <div class="card text-bg-primary shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-1 text-white-50">Attempts</h6>
+                    <p class="display-5 mb-0">{{ attempts|length }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card text-bg-success shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-1 text-white-50">Best score</h6>
+                    <p class="display-5 mb-0">{{ best }}%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card text-bg-info shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-1 text-white-50">Average</h6>
+                    <p class="display-5 mb-0">{{ avg }}%</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Score</th>
+                        <th>Percentage</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in attempts %}
+                        <tr>
+                            <td class="text-muted">{{ forloop.counter }}</td>
+                            <td>{{ a.completed_at|date:"M j, Y, g:i a" }}</td>
+                            <td>{{ a.score }} / {{ a.total }}</td>
+                            <td>
+                                <span class="badge
+                                    {% if a.percentage >= 80 %}bg-success
+                                    {% elif a.percentage >= 50 %}bg-warning text-dark
+                                    {% else %}bg-danger{% endif %}">
+                                    {{ a.percentage }}%
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'learning_logs:quiz_result' a.id %}" class="btn btn-sm btn-outline-primary">Review</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-light border text-center p-5">
+        <p class="fs-5 text-muted mb-3">You haven't completed any quizzes for this topic yet.</p>
+        <a href="{% url 'learning_logs:topic_quiz' topic.id %}" class="btn btn-warning fw-bold">🧠 Take your first quiz</a>
+    </div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-link">&larr; Back to topic</a>
+</div>
+
+{% endblock content %}

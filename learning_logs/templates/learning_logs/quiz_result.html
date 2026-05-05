@@ -1,0 +1,78 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Quiz result</li>
+        </ol>
+    </nav>
+    <h2>📊 Quiz result</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<div class="card shadow-sm mb-4
+    {% if attempt.percentage >= 80 %}border-success
+    {% elif attempt.percentage >= 50 %}border-warning
+    {% else %}border-danger{% endif %}">
+    <div class="card-body text-center">
+        <h3 class="mb-1">{{ attempt.score }} / {{ attempt.total }} correct</h3>
+        <p class="display-4 mb-2
+            {% if attempt.percentage >= 80 %}text-success
+            {% elif attempt.percentage >= 50 %}text-warning
+            {% else %}text-danger{% endif %}">
+            {{ attempt.percentage }}%
+        </p>
+        <p class="text-muted small mb-0">
+            Topic: <strong>{{ topic.text }}</strong>
+            &middot; Completed {{ attempt.completed_at|date:"M j, Y, g:i a" }}
+        </p>
+    </div>
+</div>
+
+<h4 class="mb-3">Review</h4>
+
+{% for item in review %}
+    <div class="card shadow-sm mb-3 {% if item.is_correct %}border-success{% else %}border-danger{% endif %}">
+        <div class="card-body">
+            <p class="fw-bold mb-3">
+                <span class="badge {% if item.is_correct %}bg-success{% else %}bg-danger{% endif %} me-2">
+                    {{ forloop.counter }}{% if item.is_correct %} ✓{% else %} ✗{% endif %}
+                </span>
+                {{ item.question }}
+            </p>
+
+            <ul class="list-group list-group-flush">
+                {% for option in item.options %}
+                    <li class="list-group-item d-flex align-items-center
+                        {% if forloop.counter0 == item.correct_index %}list-group-item-success{% endif %}
+                        {% if forloop.counter0 == item.picked and forloop.counter0 != item.correct_index %}list-group-item-danger{% endif %}">
+                        <span class="me-2 text-muted">{{ forloop.counter }}.</span>
+                        {{ option }}
+                        {% if forloop.counter0 == item.correct_index %}
+                            <span class="ms-auto badge bg-success">Correct answer</span>
+                        {% elif forloop.counter0 == item.picked %}
+                            <span class="ms-auto badge bg-danger">Your answer</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+
+            {% if item.explanation %}
+                <div class="alert alert-light border mt-3 mb-0 small">
+                    <strong>Explanation:</strong> {{ item.explanation }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endfor %}
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+    <a href="{% url 'learning_logs:topic_quiz' topic.id %}" class="btn btn-warning fw-bold">🔁 Take another quiz</a>
+    <a href="{% url 'learning_logs:quiz_history' topic.id %}" class="btn btn-outline-primary">📈 Quiz history</a>
+    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">Back to topic</a>
+</div>
+
+{% endblock content %}

@@ -34,8 +34,14 @@ urlpatterns = [
     # This path handles the web view AND the PDF/DOCX downloads via query parameters
     path('summary/<int:topic_id>/', views.topic_summary, name='topic_summary'),
 
-    # This URL will be used by the new button in the topic view
+    # Start a new quiz attempt for a topic (creates a QuizAttempt and redirects).
     path('quiz/<int:topic_id>/', views.topic_quiz, name='topic_quiz'),
+    # Take an in-progress quiz attempt (GET shows form, POST grades it).
+    path('quiz/attempt/<int:attempt_id>/', views.take_quiz, name='take_quiz'),
+    # See graded results for a completed attempt.
+    path('quiz/result/<int:attempt_id>/', views.quiz_result, name='quiz_result'),
+    # See past attempts on a topic.
+    path('quiz/history/<int:topic_id>/', views.quiz_history, name='quiz_history'),
 
     # AI Q&A chat for a topic (basic RAG over user's own notes)
     path('qa/<int:topic_id>/', views.topic_qa, name='topic_qa'),
