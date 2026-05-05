@@ -38,6 +38,10 @@
                 </ul>
             </div>
 
+            <a href="{% url 'learning_logs:topic_qa' topic.id %}" class="btn btn-info fw-bold shadow-sm text-white">
+                💬 Ask AI
+            </a>
+
             <a href="{% url 'learning_logs:topic_quiz' topic.id %}" class="btn btn-warning fw-bold shadow-sm">
                 🧠 Quiz Me
             </a>

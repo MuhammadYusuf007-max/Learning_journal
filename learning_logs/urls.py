@@ -37,6 +37,9 @@ urlpatterns = [
     # This URL will be used by the new button in the topic view
     path('quiz/<int:topic_id>/', views.topic_quiz, name='topic_quiz'),
 
+    # AI Q&A chat for a topic (basic RAG over user's own notes)
+    path('qa/<int:topic_id>/', views.topic_qa, name='topic_qa'),
+
     # Search across the user's topics and entries
     path('search/', views.search, name='search'),
 ]

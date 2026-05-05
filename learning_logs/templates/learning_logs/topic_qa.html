@@ -1,0 +1,101 @@
+{% extends 'learning_logs/base.html' %}
+
+{% load markdownify %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Ask AI</li>
+        </ol>
+    </nav>
+    <h2 class="d-flex align-items-center gap-2">
+        <span>🤖 Ask AI about <span class="text-primary">{{ topic.text }}</span></span>
+    </h2>
+    <p class="text-muted small mb-0">
+        The AI answers using only your {{ entry_count }} note{{ entry_count|pluralize }} for this topic.
+    </p>
+{% endblock page_header %}
+
+{% block content %}
+
+{% if not has_entries %}
+    <div class="alert alert-warning">
+        This topic doesn't have any entries yet.
+        <a href="{% url 'learning_logs:new_entry' topic.id %}" class="alert-link">Add your first entry</a>
+        before asking questions.
+    </div>
+{% endif %}
+
+<div id="qa-conversation" class="mb-4">
+    {% if history %}
+        {% for item in history %}
+            <div class="mb-3">
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="bg-primary text-white p-3 rounded-3 shadow-sm" style="max-width: 80%;">
+                        <strong class="d-block small text-white-50 mb-1">You</strong>
+                        {{ item.q }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-start">
+                    <div class="bg-light border p-3 rounded-3 shadow-sm" style="max-width: 80%;">
+                        <strong class="d-block small text-muted mb-1">🤖 AI tutor</strong>
+                        <div class="qa-answer">{{ item.a|markdownify }}</div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-center text-muted py-5">
+            <p class="fs-5 mb-2">No questions yet.</p>
+            <p class="small mb-0">Try asking <em>"What are the key points so far?"</em> or <em>"What should I review next?"</em></p>
+        </div>
+    {% endif %}
+</div>
+
+<form method="post" action="{% url 'learning_logs:topic_qa' topic.id %}" class="mt-3">
+    {% csrf_token %}
+    <div class="input-group input-group-lg shadow-sm">
+        <input
+            type="text"
+            name="question"
+            class="form-control"
+            placeholder="Ask a question about your notes..."
+            required
+            autofocus
+            {% if not has_entries %}disabled{% endif %}>
+        <button
+            type="submit"
+            name="action"
+            value="ask"
+            class="btn btn-primary"
+            {% if not has_entries %}disabled{% endif %}>
+            Ask
+        </button>
+    </div>
+</form>
+
+<div class="d-flex justify-content-between mt-3">
+    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-link">&larr; Back to topic</a>
+    {% if history %}
+        <form method="post" action="{% url 'learning_logs:topic_qa' topic.id %}" class="d-inline"
+              onsubmit="return confirm('Clear the entire conversation?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="clear">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Clear conversation</button>
+        </form>
+    {% endif %}
+</div>
+
+<script>
+    // Auto-scroll to the latest message on page load.
+    document.addEventListener('DOMContentLoaded', function () {
+        var conv = document.getElementById('qa-conversation');
+        if (conv && conv.lastElementChild) {
+            conv.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+    });
+</script>
+
+{% endblock content %}
