@@ -1,0 +1,19 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <h2 class="text-warning">403 — Access forbidden</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<p class="lead">You don't have permission to view this page.</p>
+<p class="text-muted">If you believe this is a mistake, please log in with an account that has access.</p>
+
+<div class="mt-4">
+    <a href="{% url 'learning_logs:index' %}" class="btn btn-primary">Go to home</a>
+    {% if not user.is_authenticated %}
+        <a href="{% url 'accounts:login' %}" class="btn btn-outline-secondary">Log in</a>
+    {% endif %}
+</div>
+
+{% endblock content %}

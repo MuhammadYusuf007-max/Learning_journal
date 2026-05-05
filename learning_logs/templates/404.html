@@ -1,0 +1,19 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <h2 class="text-danger">404 — Page not found</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<p class="lead">Sorry, the page you were looking for doesn't exist.</p>
+<p class="text-muted">It may have been moved, renamed, or never existed in the first place.</p>
+
+<div class="mt-4">
+    <a href="{% url 'learning_logs:index' %}" class="btn btn-primary">Go to home</a>
+    {% if user.is_authenticated %}
+        <a href="{% url 'learning_logs:topics' %}" class="btn btn-outline-secondary">My topics</a>
+    {% endif %}
+</div>
+
+{% endblock content %}

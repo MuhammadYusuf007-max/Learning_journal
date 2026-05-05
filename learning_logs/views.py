@@ -5,6 +5,8 @@ from openai import OpenAI
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core.paginator import Paginator
 from django.http import Http404, FileResponse, HttpResponse
 from django.template.defaultfilters import striptags
 
@@ -87,10 +89,20 @@ def topics(request):
 
 @login_required
 def topic(request, topic_id):
-    """Show a single topic and all its entries."""
+    """Show a single topic and a paginated list of its entries."""
     topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
-    entries = topic.entry_set.order_by('-date_added')
-    context = {'topic': topic, 'entries': entries}
+    all_entries = topic.entry_set.order_by('-date_added')
+
+    paginator = Paginator(all_entries, 10)  # 10 entries per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'topic': topic,
+        'entries': page_obj,
+        'page_obj': page_obj,
+        'is_paginated': page_obj.has_other_pages(),
+    }
     return render(request, 'learning_logs/topic.html', context)
 
 @login_required
@@ -159,6 +171,7 @@ def new_topic(request):
             new_topic = form.save(commit=False)
             new_topic.owner = request.user
             new_topic.save()
+            messages.success(request, f'Topic "{new_topic.text}" created.')
             return redirect('learning_logs:topics')
     context = {'form': form}
     return render(request, 'learning_logs/new_topic.html', context)
@@ -174,10 +187,10 @@ def new_entry(request, topic_id):
         if form.is_valid():
             new_entry = form.save(commit=False)
             new_entry.topic = topic
-            # Clean text and summarize
             clean_text = striptags(new_entry.text)
             new_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
             new_entry.save()
+            messages.success(request, 'Entry added.')
             return redirect('learning_logs:topic', topic_id=topic_id)
     context = {'topic': topic, 'form': form}
     return render(request, 'learning_logs/new_entry.html', context)
@@ -199,6 +212,7 @@ def edit_entry(request, entry_id):
             clean_text = striptags(edited_entry.text)
             edited_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
             edited_entry.save()
+            messages.success(request, 'Entry updated.')
             return redirect('learning_logs:topic', topic_id=topic.id)
     context = {'entry': entry, 'topic': topic, 'form': form}
     return render(request, 'learning_logs/edit_entry.html', context)
@@ -213,6 +227,7 @@ def edit_topic(request, topic_id):
         form = TopicForm(instance=topic, data=request.POST)
         if form.is_valid():
             form.save()
+            messages.success(request, 'Topic updated.')
             return redirect('learning_logs:topic', topic_id=topic.id)
     context = {'topic': topic, 'form': form}
     return render(request, 'learning_logs/edit_topic.html', context)
@@ -222,7 +237,9 @@ def delete_topic(request, topic_id):
     """Delete an existing topic."""
     topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
     if request.method == 'POST':
+        topic_name = topic.text
         topic.delete()
+        messages.success(request, f'Topic "{topic_name}" deleted.')
         return redirect('learning_logs:topics')
     return render(request, 'learning_logs/delete_topic.html', {'topic': topic})
 
