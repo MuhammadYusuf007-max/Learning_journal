@@ -26,7 +26,18 @@
                     <span class="text-secondary fw-bold">{{ entry.date_added|date:'d M, Y H:i' }}</span>
                     <a href="{% url 'learning_logs:edit_entry' entry.id %}" class="btn btn-sm btn-outline-secondary">Edit Entry</a>
                 </div>
+                
                 <div class="card-body fs-5 text-dark p-4">
+                    {% if entry.ai_summary %}
+                    <div class="alert alert-primary border-0 shadow-sm mb-4 p-3 rounded-3 bg-opacity-10">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="fs-4 me-2">🤖</span> 
+                            <strong class="text-primary">AI Key Takeaway:</strong>
+                        </div>
+                        <p class="mb-0 fs-6 text-dark">{{ entry.ai_summary }}</p>
+                    </div>
+                    {% endif %}
+                    
                     {{ entry.text|markdownify }}
                 </div>
             </div>
