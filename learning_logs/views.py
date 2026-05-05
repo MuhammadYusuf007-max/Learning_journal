@@ -19,10 +19,26 @@ from docx import Document
 
 # --- AI SETUP ---
 load_dotenv()
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
-)
+
+_ai_client = None
+
+
+def _get_ai_client():
+    """Lazily build the AI client so the app can boot without an API key."""
+    global _ai_client
+    if _ai_client is not None:
+        return _ai_client
+
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+
+    _ai_client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+    return _ai_client
+
 
 def generate_ai_content(text, mode="summary"):
     """
@@ -38,6 +54,10 @@ def generate_ai_content(text, mode="summary"):
     else:
         system_msg = "You are a helpful assistant."
         user_msg = f"Summarize this in one short sentence: {text}"
+
+    client = _get_ai_client()
+    if client is None:
+        return "AI features disabled: GROQ_API_KEY is not set."
 
     try:
         response = client.chat.completions.create(

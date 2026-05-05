@@ -116,6 +116,12 @@ LOGIN_REDIRECT_URL = 'learning_logs:index'
 LOGOUT_REDIRECT_URL = 'learning_logs:index'
 LOGIN_URL = 'accounts:login'
 
+# Email (development): print emails to the console instead of sending them.
+# Replace with SMTP backend for production.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'no-reply@learning-journal.local'
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24  # 1 day
+
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
