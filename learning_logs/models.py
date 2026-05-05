@@ -32,6 +32,22 @@ class Entry(models.Model):
             return preview_text
 
 
+class QAExchange(models.Model):
+    """A single AI Q&A exchange for a topic (used by the streaming chat)."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='qa_exchanges')
+    topic = models.ForeignKey(Topic, on_delete=models.CASCADE, related_name='qa_exchanges')
+    question = models.TextField()
+    answer = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Q&A on {self.topic.text} by {self.user.username}: {self.question[:40]}"
+
+
 class Flashcard(models.Model):
     """A study flashcard belonging to a topic. Front = prompt, back = answer."""
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE, related_name='flashcards')

@@ -45,6 +45,7 @@ urlpatterns = [
 
     # AI Q&A chat for a topic (basic RAG over user's own notes)
     path('qa/<int:topic_id>/', views.topic_qa, name='topic_qa'),
+    path('qa/<int:topic_id>/stream/', views.topic_qa_stream, name='topic_qa_stream'),
 
     # Flashcards
     path('flashcards/<int:topic_id>/', views.topic_flashcards, name='topic_flashcards'),

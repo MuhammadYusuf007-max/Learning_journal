@@ -15,6 +15,7 @@
     </h2>
     <p class="text-muted small mb-0">
         The AI answers using only your {{ entry_count }} note{{ entry_count|pluralize }} for this topic.
+        Answers stream live as they're generated.
     </p>
 {% endblock page_header %}
 
@@ -28,36 +29,44 @@
     </div>
 {% endif %}
 
+<style>
+    .typing-cursor {
+        display: inline-block; width: 8px; height: 1.1em;
+        background: #0d6efd; margin-left: 2px; vertical-align: text-bottom;
+        animation: blink 1s steps(2) infinite;
+    }
+    @keyframes blink { to { opacity: 0; } }
+</style>
+
 <div id="qa-conversation" class="mb-4">
-    {% if history %}
-        {% for item in history %}
-            <div class="mb-3">
-                <div class="d-flex justify-content-end mb-2">
-                    <div class="bg-primary text-white p-3 rounded-3 shadow-sm" style="max-width: 80%;">
-                        <strong class="d-block small text-white-50 mb-1">You</strong>
-                        {{ item.q }}
-                    </div>
-                </div>
-                <div class="d-flex justify-content-start">
-                    <div class="bg-light border p-3 rounded-3 shadow-sm" style="max-width: 80%;">
-                        <strong class="d-block small text-muted mb-1">🤖 AI tutor</strong>
-                        <div class="qa-answer">{{ item.a|markdownify }}</div>
-                    </div>
+    {% for item in history %}
+        <div class="mb-3">
+            <div class="d-flex justify-content-end mb-2">
+                <div class="bg-primary text-white p-3 rounded-3 shadow-sm" style="max-width: 80%;">
+                    <strong class="d-block small text-white-50 mb-1">You</strong>
+                    {{ item.question }}
                 </div>
             </div>
-        {% endfor %}
-    {% else %}
-        <div class="text-center text-muted py-5">
+            <div class="d-flex justify-content-start">
+                <div class="bg-light border p-3 rounded-3 shadow-sm" style="max-width: 80%;">
+                    <strong class="d-block small text-muted mb-1">🤖 AI tutor</strong>
+                    <div class="qa-answer">{{ item.answer|markdownify }}</div>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <div class="text-center text-muted py-5" id="qa-empty-state">
             <p class="fs-5 mb-2">No questions yet.</p>
             <p class="small mb-0">Try asking <em>"What are the key points so far?"</em> or <em>"What should I review next?"</em></p>
         </div>
-    {% endif %}
+    {% endfor %}
 </div>
 
-<form method="post" action="{% url 'learning_logs:topic_qa' topic.id %}" class="mt-3">
+<form id="qa-form" class="mt-3" data-stream-url="{% url 'learning_logs:topic_qa_stream' topic.id %}">
     {% csrf_token %}
     <div class="input-group input-group-lg shadow-sm">
         <input
+            id="qa-question"
             type="text"
             name="question"
             class="form-control"
@@ -66,9 +75,8 @@
             autofocus
             {% if not has_entries %}disabled{% endif %}>
         <button
+            id="qa-submit"
             type="submit"
-            name="action"
-            value="ask"
             class="btn btn-primary"
             {% if not has_entries %}disabled{% endif %}>
             Ask
@@ -89,13 +97,124 @@
 </div>
 
 <script>
-    // Auto-scroll to the latest message on page load.
-    document.addEventListener('DOMContentLoaded', function () {
-        var conv = document.getElementById('qa-conversation');
-        if (conv && conv.lastElementChild) {
-            conv.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
+(function () {
+    var form = document.getElementById('qa-form');
+    var input = document.getElementById('qa-question');
+    var submitBtn = document.getElementById('qa-submit');
+    var conv = document.getElementById('qa-conversation');
+    var emptyState = document.getElementById('qa-empty-state');
+
+    if (!form) return;
+
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+    }
+
+    function appendUserBubble(question) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mb-3';
+        wrapper.innerHTML =
+            '<div class="d-flex justify-content-end mb-2">' +
+                '<div class="bg-primary text-white p-3 rounded-3 shadow-sm" style="max-width: 80%;">' +
+                    '<strong class="d-block small text-white-50 mb-1">You</strong>' +
+                    escapeHtml(question) +
+                '</div>' +
+            '</div>' +
+            '<div class="d-flex justify-content-start">' +
+                '<div class="bg-light border p-3 rounded-3 shadow-sm" style="max-width: 80%;">' +
+                    '<strong class="d-block small text-muted mb-1">🤖 AI tutor</strong>' +
+                    '<div class="qa-answer ai-streaming"></div>' +
+                '</div>' +
+            '</div>';
+        conv.appendChild(wrapper);
+        return wrapper.querySelector('.ai-streaming');
+    }
+
+    function scrollToEnd(el) {
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var question = input.value.trim();
+        if (!question) return;
+
+        if (emptyState && emptyState.parentNode) emptyState.parentNode.removeChild(emptyState);
+
+        input.disabled = true;
+        submitBtn.disabled = true;
+        var originalLabel = submitBtn.textContent;
+        submitBtn.textContent = 'Thinking...';
+
+        var answerEl = appendUserBubble(question);
+        // Add typing cursor while streaming.
+        var cursor = document.createElement('span');
+        cursor.className = 'typing-cursor';
+        answerEl.appendChild(cursor);
+        scrollToEnd(answerEl);
+
+        var formData = new FormData();
+        formData.append('question', question);
+        formData.append('csrfmiddlewaretoken',
+            form.querySelector('[name=csrfmiddlewaretoken]').value);
+
+        try {
+            var resp = await fetch(form.dataset.streamUrl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+            });
+
+            if (!resp.ok || !resp.body) {
+                var errText = await resp.text();
+                answerEl.removeChild(cursor);
+                answerEl.innerHTML += '<div class="alert alert-danger small mb-0 mt-2">' +
+                    escapeHtml(errText || 'Something went wrong.') + '</div>';
+                return;
+            }
+
+            var reader = resp.body.getReader();
+            var decoder = new TextDecoder();
+            var fullText = '';
+
+            while (true) {
+                var read = await reader.read();
+                if (read.done) break;
+                var chunk = decoder.decode(read.value, { stream: true });
+                fullText += chunk;
+                // Insert chunk before the blinking cursor.
+                cursor.insertAdjacentText('beforebegin', chunk);
+                scrollToEnd(answerEl);
+            }
+
+            // Remove cursor when done.
+            if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+            // Refresh page to load the persisted exchange and render markdown.
+            // (We skip the reload if you prefer raw text — comment this line out.)
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+            answerEl.innerHTML += '<div class="alert alert-danger small mb-0 mt-2">' +
+                'Connection lost. Please try again.</div>';
+        } finally {
+            input.disabled = false;
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalLabel;
+            input.value = '';
+            input.focus();
         }
     });
+
+    // Auto-scroll to the latest message on page load.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (conv && conv.lastElementChild) {
+            conv.lastElementChild.scrollIntoView({ behavior: 'auto', block: 'end' });
+        }
+    });
+})();
 </script>
 
 {% endblock content %}

@@ -13,7 +13,10 @@ from django.http import Http404, FileResponse, HttpResponse
 from django.template.defaultfilters import striptags
 from django.utils import timezone
 
-from .models import Topic, Entry, QuizAttempt, Flashcard
+from django.http import StreamingHttpResponse
+from django.views.decorators.http import require_POST
+
+from .models import Topic, Entry, QuizAttempt, Flashcard, QAExchange
 from .forms import TopicForm, EntryForm, FlashcardForm
 
 # Libraries for file export
@@ -207,15 +210,8 @@ def generate_ai_flashcards_json(notes_text, num_cards=8):
     return valid
 
 
-def generate_ai_qa(context_text, question):
-    """
-    Answer a user's question using the topic's notes as context (basic RAG).
-
-    For very large topics, the context could exceed the model's context window.
-    A future improvement would be to embed entries and retrieve only the most
-    relevant ones via cosine similarity (true RAG). For now we stuff all entries.
-    """
-    # Truncate context to keep us safely under the model's context window.
+def _build_qa_messages(context_text, question):
+    """Build the system + user messages for a Q&A request (shared by sync + streaming)."""
     MAX_CONTEXT_CHARS = 12000
     if len(context_text) > MAX_CONTEXT_CHARS:
         context_text = context_text[:MAX_CONTEXT_CHARS] + "\n[...notes truncated...]"
@@ -231,8 +227,49 @@ def generate_ai_qa(context_text, question):
         f"QUESTION:\n{question}\n\n"
         "Answer using only the notes above."
     )
+    return system_msg, user_msg
 
+
+def generate_ai_qa(context_text, question):
+    """
+    Answer a user's question using the topic's notes as context (basic RAG).
+    Blocking version (returns the full answer string).
+    """
+    system_msg, user_msg = _build_qa_messages(context_text, question)
     return _call_ai(system_msg, user_msg)
+
+
+def stream_ai_qa(context_text, question):
+    """
+    Streaming version of generate_ai_qa. Yields text chunks as they arrive
+    from the model so the UI can render the answer progressively.
+    """
+    client = _get_ai_client()
+    if client is None:
+        yield "AI features disabled: GROQ_API_KEY is not set."
+        return
+
+    system_msg, user_msg = _build_qa_messages(context_text, question)
+
+    try:
+        stream = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            stream=True,
+        )
+        for chunk in stream:
+            try:
+                delta = chunk.choices[0].delta.content
+            except (AttributeError, IndexError):
+                delta = None
+            if delta:
+                yield delta
+    except Exception as e:
+        print(f"AI streaming error: {e}")
+        yield f"\n\n[Error: AI service is unavailable right now.]"
 
 # --- VIEWS ---
 
@@ -522,52 +559,81 @@ def review_flashcards(request, topic_id):
     })
 
 
+def _build_qa_context(topic):
+    """Concatenate a topic's entries into a single context block for the AI."""
+    entries = topic.entry_set.all().order_by('date_added')
+    return "\n\n".join(
+        f"[Entry {i+1}, {e.date_added:%Y-%m-%d}]\n{striptags(e.text)}"
+        for i, e in enumerate(entries)
+    )
+
+
 @login_required
 def topic_qa(request, topic_id):
-    """Chat-style Q&A: ask a question, AI answers using only the topic's notes."""
+    """Chat-style Q&A page (loads history from the DB; streaming happens via JS)."""
     topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
-    entries = topic.entry_set.all().order_by('date_added')
+    entries_exist = topic.entry_set.exists()
+    entry_count = topic.entry_set.count()
 
-    session_key = f'topic_qa_history_{topic_id}'
-    history = request.session.get(session_key, [])
-
-    if request.method == 'POST':
-        action = request.POST.get('action', 'ask')
-
-        if action == 'clear':
-            request.session[session_key] = []
-            messages.success(request, 'Conversation cleared.')
-            return redirect('learning_logs:topic_qa', topic_id=topic.id)
-
-        question = request.POST.get('question', '').strip()
-        if not question:
-            messages.warning(request, 'Please enter a question.')
-            return redirect('learning_logs:topic_qa', topic_id=topic.id)
-
-        if not entries.exists():
-            messages.warning(
-                request,
-                'This topic has no entries yet. Add some notes before asking questions.',
-            )
-            return redirect('learning_logs:topic', topic_id=topic.id)
-
-        context_text = "\n\n".join(
-            f"[Entry {i+1}, {e.date_added:%Y-%m-%d}]\n{striptags(e.text)}"
-            for i, e in enumerate(entries)
-        )
-        answer = generate_ai_qa(context_text, question)
-
-        history.append({'q': question, 'a': answer})
-        # Keep only the last 20 exchanges to bound session size.
-        request.session[session_key] = history[-20:]
+    if request.method == 'POST' and request.POST.get('action') == 'clear':
+        QAExchange.objects.filter(user=request.user, topic=topic).delete()
+        messages.success(request, 'Conversation cleared.')
         return redirect('learning_logs:topic_qa', topic_id=topic.id)
+
+    history = QAExchange.objects.filter(user=request.user, topic=topic).order_by('created_at')
 
     return render(request, 'learning_logs/topic_qa.html', {
         'topic': topic,
         'history': history,
-        'has_entries': entries.exists(),
-        'entry_count': entries.count(),
+        'has_entries': entries_exist,
+        'entry_count': entry_count,
     })
+
+
+@login_required
+@require_POST
+def topic_qa_stream(request, topic_id):
+    """
+    Stream an AI answer to a question for this topic.
+    Returns a StreamingHttpResponse of plain-text chunks. The full answer is
+    persisted to a QAExchange row when the stream finishes.
+    """
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+
+    question = request.POST.get('question', '').strip()
+    if not question:
+        return HttpResponse('Please enter a question.', status=400)
+
+    if not topic.entry_set.exists():
+        return HttpResponse(
+            'This topic has no entries yet. Add some notes before asking questions.',
+            status=400,
+        )
+
+    context_text = _build_qa_context(topic)
+    exchange = QAExchange.objects.create(
+        user=request.user,
+        topic=topic,
+        question=question,
+    )
+
+    def generate():
+        full_answer = []
+        try:
+            for chunk in stream_ai_qa(context_text, question):
+                full_answer.append(chunk)
+                yield chunk
+        finally:
+            exchange.answer = ''.join(full_answer)
+            exchange.completed_at = timezone.now()
+            exchange.save(update_fields=['answer', 'completed_at'])
+
+    response = StreamingHttpResponse(generate(), content_type='text/plain; charset=utf-8')
+    # Hint to nginx/reverse proxies not to buffer the response so chunks reach
+    # the browser immediately.
+    response['X-Accel-Buffering'] = 'no'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @login_required
