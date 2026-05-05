@@ -1,9 +1,14 @@
+import json
+from datetime import timedelta
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 
-from learning_logs.models import Topic, Entry, QuizAttempt
+from learning_logs.models import Topic, Entry, QuizAttempt, AIUsage
 
 from .forms import CustomUserCreationForm
 
@@ -59,6 +64,35 @@ def profile(request):
 
     recent_attempts = completed_attempts.select_related('topic').order_by('-completed_at')[:5]
 
+    # AI usage stats
+    user_usage = AIUsage.objects.filter(user=user)
+    usage_totals = user_usage.aggregate(calls=Count('id'), tokens=Sum('total_tokens'))
+    ai_calls = usage_totals['calls'] or 0
+    ai_tokens = usage_totals['tokens'] or 0
+    by_feature = list(
+        user_usage.values('feature')
+        .annotate(calls=Count('id'), tokens=Sum('total_tokens'))
+        .order_by('-tokens')
+    )
+
+    # Daily series for the last 30 days for the chart.
+    today = timezone.now().date()
+    start = today - timedelta(days=29)
+    daily_qs = (
+        user_usage.filter(created_at__date__gte=start)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(calls=Count('id'))
+        .order_by('day')
+    )
+    daily_lookup = {row['day']: row['calls'] for row in daily_qs}
+    chart_labels = []
+    chart_values = []
+    for i in range(30):
+        d = start + timedelta(days=i)
+        chart_labels.append(d.strftime('%b %d'))
+        chart_values.append(daily_lookup.get(d, 0))
+
     context = {
         'topic_count': topic_count,
         'entry_count': entry_count,
@@ -69,5 +103,10 @@ def profile(request):
         'quiz_points': quiz_points,
         'quiz_total_questions': quiz_total_questions,
         'recent_attempts': recent_attempts,
+        'ai_calls': ai_calls,
+        'ai_tokens': ai_tokens,
+        'ai_by_feature': by_feature,
+        'ai_chart_labels': json.dumps(chart_labels),
+        'ai_chart_values': json.dumps(chart_values),
     }
     return render(request, 'registration/profile.html', context)

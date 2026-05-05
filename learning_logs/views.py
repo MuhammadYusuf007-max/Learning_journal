@@ -9,6 +9,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db.models import Count
 from django.http import Http404, FileResponse, HttpResponse
 from django.template.defaultfilters import striptags
 from django.utils import timezone
@@ -16,7 +17,7 @@ from django.utils import timezone
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_POST
 
-from .models import Topic, Entry, QuizAttempt, Flashcard, QAExchange
+from .models import Topic, Entry, QuizAttempt, Flashcard, QAExchange, Tag, AIUsage
 from .forms import TopicForm, EntryForm, FlashcardForm
 
 # Libraries for file export
@@ -48,7 +49,24 @@ def _get_ai_client():
     return _ai_client
 
 
-def _call_ai(system_msg, user_msg):
+def _log_usage(user, feature, response):
+    """Record token usage for one AI call. Best-effort, swallows all errors."""
+    try:
+        usage = getattr(response, 'usage', None)
+        if usage is None:
+            return
+        AIUsage.objects.create(
+            user=user if (user and user.is_authenticated) else None,
+            feature=feature or 'other',
+            prompt_tokens=getattr(usage, 'prompt_tokens', 0) or 0,
+            completion_tokens=getattr(usage, 'completion_tokens', 0) or 0,
+            total_tokens=getattr(usage, 'total_tokens', 0) or 0,
+        )
+    except Exception as e:
+        print(f"AI usage logging error: {e}")
+
+
+def _call_ai(system_msg, user_msg, user=None, feature=None):
     """Low-level helper that makes one chat completion call."""
     client = _get_ai_client()
     if client is None:
@@ -61,13 +79,14 @@ def _call_ai(system_msg, user_msg):
                 {"role": "user", "content": user_msg},
             ],
         )
+        _log_usage(user, feature, response)
         return response.choices[0].message.content
     except Exception as e:
         print(f"AI Error: {e}")
         return "Content unavailable at this time."
 
 
-def generate_ai_content(text, mode="summary"):
+def generate_ai_content(text, mode="summary", user=None):
     """
     Refined AI helper to handle different tasks.
     Modes: 'summary', 'master', 'quiz'
@@ -75,17 +94,20 @@ def generate_ai_content(text, mode="summary"):
     if mode == "quiz":
         system_msg = "You are a demanding university professor."
         user_msg = f"Based on the following notes, generate 5 challenging multiple-choice or open-ended study questions. Do not provide answers, just the questions. Notes: {text}"
+        feature = 'quiz'
     elif mode == "master":
         system_msg = "You are a helpful academic assistant."
         user_msg = f"Provide a cohesive 3-paragraph summary of this learning progress: {text}"
+        feature = 'master'
     else:
         system_msg = "You are a helpful assistant."
         user_msg = f"Summarize this in one short sentence: {text}"
+        feature = 'summary'
 
-    return _call_ai(system_msg, user_msg)
+    return _call_ai(system_msg, user_msg, user=user, feature=feature)
 
 
-def generate_ai_quiz_json(notes_text, num_questions=5):
+def generate_ai_quiz_json(notes_text, num_questions=5, user=None):
     """
     Ask the AI for a structured multiple-choice quiz in JSON form.
     Returns a list of question dicts, or an empty list on failure.
@@ -108,7 +130,7 @@ def generate_ai_quiz_json(notes_text, num_questions=5):
         f"Return JSON only."
     )
 
-    raw = _call_ai(system_msg, user_msg)
+    raw = _call_ai(system_msg, user_msg, user=user, feature='quiz')
     if not raw or raw.startswith("AI features disabled"):
         return []
 
@@ -154,7 +176,82 @@ def generate_ai_quiz_json(notes_text, num_questions=5):
     return valid
 
 
-def generate_ai_flashcards_json(notes_text, num_cards=8):
+_TAG_SAFE_RE = re.compile(r'[^a-z0-9\-]+')
+
+
+def _normalize_tag(name):
+    """Lowercase, slugify, strip to a safe tag name. Returns '' if invalid."""
+    if not isinstance(name, str):
+        return ''
+    s = name.strip().lower().replace(' ', '-')
+    s = _TAG_SAFE_RE.sub('', s)
+    s = s.strip('-')
+    return s[:50]
+
+
+def generate_ai_tags_json(text, num_tags=4, user=None):
+    """Ask the AI for short tag strings as a JSON array. Returns list of normalized tag names."""
+    MAX_CHARS = 6000
+    if len(text) > MAX_CHARS:
+        text = text[:MAX_CHARS]
+
+    system_msg = (
+        "You generate short, lowercase, single-word or hyphenated tags for study notes. "
+        "Respond with ONLY a JSON array of strings, no prose, no markdown. "
+        "Each tag must be 1-3 words, lowercase, hyphen-separated, max 30 chars. "
+        "Examples: \"machine-learning\", \"calculus\", \"history\", \"databases\"."
+    )
+    user_msg = (
+        f"Generate exactly {num_tags} concise tags for the following note:\n\n"
+        f"{text}\n\n"
+        f"Return JSON only."
+    )
+
+    raw = _call_ai(system_msg, user_msg, user=user, feature='tags')
+    if not raw or raw.startswith("AI features disabled"):
+        return []
+
+    cleaned = raw.strip()
+    fence_match = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    if not cleaned.startswith('['):
+        bracket_match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+        if bracket_match:
+            cleaned = bracket_match.group(0)
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    seen = set()
+    result = []
+    for item in data:
+        norm = _normalize_tag(item)
+        if norm and norm not in seen:
+            seen.add(norm)
+            result.append(norm)
+    return result[:num_tags]
+
+
+def _attach_ai_tags(entry, user):
+    """Generate tags for an entry's text and link them. Best-effort, no exceptions raised."""
+    try:
+        names = generate_ai_tags_json(striptags(entry.text), num_tags=4, user=user)
+        for name in names:
+            tag, _ = Tag.objects.get_or_create(name=name, owner=user)
+            entry.tags.add(tag)
+        return names
+    except Exception as e:
+        print(f"Auto-tag error: {e}")
+        return []
+
+
+def generate_ai_flashcards_json(notes_text, num_cards=8, user=None):
     """
     Ask the AI for flashcards in JSON form.
     Returns a list of {"front": str, "back": str} dicts, or [] on failure.
@@ -177,7 +274,7 @@ def generate_ai_flashcards_json(notes_text, num_cards=8):
         f"Return JSON only."
     )
 
-    raw = _call_ai(system_msg, user_msg)
+    raw = _call_ai(system_msg, user_msg, user=user, feature='flashcards')
     if not raw or raw.startswith("AI features disabled"):
         return []
 
@@ -239,7 +336,7 @@ def generate_ai_qa(context_text, question):
     return _call_ai(system_msg, user_msg)
 
 
-def stream_ai_qa(context_text, question):
+def stream_ai_qa(context_text, question, user=None):
     """
     Streaming version of generate_ai_qa. Yields text chunks as they arrive
     from the model so the UI can render the answer progressively.
@@ -259,14 +356,34 @@ def stream_ai_qa(context_text, question):
                 {"role": "user", "content": user_msg},
             ],
             stream=True,
+            stream_options={"include_usage": True},
         )
+        usage = None
         for chunk in stream:
             try:
-                delta = chunk.choices[0].delta.content
+                if chunk.choices:
+                    delta = chunk.choices[0].delta.content
+                else:
+                    delta = None
             except (AttributeError, IndexError):
                 delta = None
             if delta:
                 yield delta
+            # The final chunk in a stream-with-usage call has empty choices and a populated `usage`.
+            if getattr(chunk, 'usage', None):
+                usage = chunk.usage
+
+        if usage is not None:
+            try:
+                AIUsage.objects.create(
+                    user=user if (user and user.is_authenticated) else None,
+                    feature='qa',
+                    prompt_tokens=getattr(usage, 'prompt_tokens', 0) or 0,
+                    completion_tokens=getattr(usage, 'completion_tokens', 0) or 0,
+                    total_tokens=getattr(usage, 'total_tokens', 0) or 0,
+                )
+            except Exception as e:
+                print(f"AI streaming usage logging error: {e}")
     except Exception as e:
         print(f"AI streaming error: {e}")
         yield f"\n\n[Error: AI service is unavailable right now.]"
@@ -310,7 +427,7 @@ def topic_summary(request, topic_id):
     
     # Combine entries for the AI
     raw_text = " ".join([striptags(e.text) for e in entries])
-    summary_text = generate_ai_content(raw_text, mode="master")
+    summary_text = generate_ai_content(raw_text, mode="master", user=request.user)
 
     export_format = request.GET.get('export')
 
@@ -385,16 +502,20 @@ def new_entry(request, topic_id):
             new_entry = form.save(commit=False)
             new_entry.topic = topic
             clean_text = striptags(new_entry.text)
-            new_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
+            new_entry.ai_summary = generate_ai_content(clean_text, mode="summary", user=request.user)
             new_entry.save()
-            messages.success(request, 'Entry added.')
+            tag_names = _attach_ai_tags(new_entry, request.user)
+            if tag_names:
+                messages.success(request, f'Entry added. Auto-tagged with: {", ".join(tag_names)}.')
+            else:
+                messages.success(request, 'Entry added.')
             return redirect('learning_logs:topic', topic_id=topic_id)
     context = {'topic': topic, 'form': form}
     return render(request, 'learning_logs/new_entry.html', context)
 
 @login_required
 def edit_entry(request, entry_id):
-    """Edit an existing entry."""
+    """Edit an existing entry, including its tags."""
     entry = get_object_or_404(Entry, id=entry_id)
     topic = entry.topic
     if topic.owner != request.user:
@@ -407,11 +528,31 @@ def edit_entry(request, entry_id):
         if form.is_valid():
             edited_entry = form.save(commit=False)
             clean_text = striptags(edited_entry.text)
-            edited_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
+            edited_entry.ai_summary = generate_ai_content(clean_text, mode="summary", user=request.user)
             edited_entry.save()
+
+            # Update tags from a comma-separated text field.
+            raw_tags = request.POST.get('tags_text', '')
+            new_tag_names = []
+            for piece in raw_tags.split(','):
+                norm = _normalize_tag(piece)
+                if norm:
+                    new_tag_names.append(norm)
+
+            edited_entry.tags.clear()
+            for name in new_tag_names:
+                tag, _ = Tag.objects.get_or_create(name=name, owner=request.user)
+                edited_entry.tags.add(tag)
+
             messages.success(request, 'Entry updated.')
             return redirect('learning_logs:topic', topic_id=topic.id)
-    context = {'entry': entry, 'topic': topic, 'form': form}
+
+    context = {
+        'entry': entry,
+        'topic': topic,
+        'form': form,
+        'tags_text': ', '.join(entry.tags.values_list('name', flat=True)),
+    }
     return render(request, 'learning_logs/edit_entry.html', context)
 
 @login_required
@@ -465,7 +606,7 @@ def generate_flashcards(request, topic_id):
         return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
 
     raw_text = " ".join(striptags(e.text) for e in entries)
-    cards_data = generate_ai_flashcards_json(raw_text, num_cards=8)
+    cards_data = generate_ai_flashcards_json(raw_text, num_cards=8, user=request.user)
 
     if not cards_data:
         messages.error(request, "Couldn't generate flashcards right now. Please try again in a moment.")
@@ -617,10 +758,12 @@ def topic_qa_stream(request, topic_id):
         question=question,
     )
 
+    user = request.user
+
     def generate():
         full_answer = []
         try:
-            for chunk in stream_ai_qa(context_text, question):
+            for chunk in stream_ai_qa(context_text, question, user=user):
                 full_answer.append(chunk)
                 yield chunk
         finally:
@@ -634,6 +777,34 @@ def topic_qa_stream(request, topic_id):
     response['X-Accel-Buffering'] = 'no'
     response['Cache-Control'] = 'no-cache'
     return response
+
+
+@login_required
+def tags_list(request):
+    """Show all of the user's tags with usage counts."""
+    tags = (
+        Tag.objects
+        .filter(owner=request.user)
+        .annotate(num_entries=Count('entries'))
+        .order_by('-num_entries', 'name')
+    )
+    return render(request, 'learning_logs/tags_list.html', {'tags': tags})
+
+
+@login_required
+def entries_by_tag(request, tag_id):
+    """Show all entries (across topics) tagged with `tag_id`, scoped to this user."""
+    tag = get_object_or_404(Tag, id=tag_id, owner=request.user)
+    entries = (
+        tag.entries
+        .filter(topic__owner=request.user)
+        .select_related('topic')
+        .order_by('-date_added')
+    )
+    return render(request, 'learning_logs/entries_by_tag.html', {
+        'tag': tag,
+        'entries': entries,
+    })
 
 
 @login_required
@@ -677,7 +848,7 @@ def topic_quiz(request, topic_id):
         return redirect('learning_logs:topic', topic_id=topic.id)
 
     raw_text = " ".join(striptags(e.text) for e in entries)
-    questions = generate_ai_quiz_json(raw_text, num_questions=5)
+    questions = generate_ai_quiz_json(raw_text, num_questions=5, user=request.user)
 
     if not questions:
         messages.error(request, "Couldn't generate a quiz right now. Please try again in a moment.")

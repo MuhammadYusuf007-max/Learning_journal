@@ -1,9 +1,24 @@
 from django.contrib import admin
 
-from .models import Topic, Entry, QuizAttempt, Flashcard
+from .models import Topic, Entry, QuizAttempt, Flashcard, Tag, AIUsage
 
 admin.site.register(Topic)
 admin.site.register(Entry)
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ('name', 'owner', 'date_added')
+    list_filter = ('owner',)
+    search_fields = ('name',)
+
+
+@admin.register(AIUsage)
+class AIUsageAdmin(admin.ModelAdmin):
+    list_display = ('user', 'feature', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'created_at')
+    list_filter = ('feature', 'user')
+    date_hierarchy = 'created_at'
+    readonly_fields = ('user', 'feature', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'created_at')
 
 
 @admin.register(QuizAttempt)

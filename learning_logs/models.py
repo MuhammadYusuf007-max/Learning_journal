@@ -12,11 +12,26 @@ class Topic(models.Model):
         """Return a string representation of the model."""
         return self.text
 
+class Tag(models.Model):
+    """A user-scoped tag that can be applied to entries (M2M)."""
+    name = models.CharField(max_length=50)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
+    date_added = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('name', 'owner')]
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class Entry(models.Model):
     """Something the user learned about a topic."""
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
     text = RichTextField()  # Upgraded for CKEditor
     ai_summary = models.TextField(blank=True, null=True)  # New field to store the AI's summary
+    tags = models.ManyToManyField(Tag, blank=True, related_name='entries')
     date_added = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -30,6 +45,32 @@ class Entry(models.Model):
             return f"{preview_text[:50]}..."
         else:
             return preview_text
+
+
+class AIUsage(models.Model):
+    """One row per AI call. Used to compute usage stats per user."""
+    FEATURE_CHOICES = [
+        ('summary', 'Entry summary'),
+        ('master', 'Master summary'),
+        ('quiz', 'Quiz generation'),
+        ('flashcards', 'Flashcards'),
+        ('qa', 'Q&A'),
+        ('tags', 'Tag suggestions'),
+        ('other', 'Other'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_usage', null=True, blank=True)
+    feature = models.CharField(max_length=30, choices=FEATURE_CHOICES, default='other')
+    prompt_tokens = models.PositiveIntegerField(default=0)
+    completion_tokens = models.PositiveIntegerField(default=0)
+    total_tokens = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        username = self.user.username if self.user else '(anonymous)'
+        return f"{username} {self.feature} {self.total_tokens}t @ {self.created_at:%Y-%m-%d}"
 
 
 class QAExchange(models.Model):

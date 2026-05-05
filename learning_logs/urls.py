@@ -56,4 +56,8 @@ urlpatterns = [
 
     # Search across the user's topics and entries
     path('search/', views.search, name='search'),
+
+    # Tags
+    path('tags/', views.tags_list, name='tags_list'),
+    path('tag/<int:tag_id>/', views.entries_by_tag, name='entries_by_tag'),
 ]

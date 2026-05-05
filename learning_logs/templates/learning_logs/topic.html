@@ -88,6 +88,17 @@
                     <div class="entry-content">
                         {{ entry.text|markdownify }}
                     </div>
+
+                    {% if entry.tags.all %}
+                        <div class="mt-3 d-flex flex-wrap gap-1">
+                            {% for tag in entry.tags.all %}
+                                <a href="{% url 'learning_logs:entries_by_tag' tag.id %}"
+                                   class="badge bg-light text-primary border text-decoration-none">
+                                    #{{ tag.name }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         {% empty %}

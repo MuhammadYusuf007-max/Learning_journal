@@ -1,0 +1,51 @@
+{% extends 'learning_logs/base.html' %}
+
+{% load markdownify %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:tags_list' %}" class="text-decoration-none">Tags</a></li>
+            <li class="breadcrumb-item active" aria-current="page">#{{ tag.name }}</li>
+        </ol>
+    </nav>
+    <h2>🏷️ Entries tagged <span class="text-primary">#{{ tag.name }}</span></h2>
+    <p class="text-muted small mb-0">{{ entries|length }} entr{{ entries|length|pluralize:"y,ies" }} across all topics.</p>
+{% endblock page_header %}
+
+{% block content %}
+
+{% if entries %}
+    {% for entry in entries %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <a href="{% url 'learning_logs:topic' entry.topic.id %}" class="fw-bold text-decoration-none">
+                    {{ entry.topic.text }}
+                </a>
+                <small class="text-muted">{{ entry.date_added|date:"M j, Y" }}</small>
+            </div>
+            <div class="card-body">
+                {% if entry.ai_summary %}
+                    <p class="text-primary small fst-italic mb-2">🤖 {{ entry.ai_summary }}</p>
+                {% endif %}
+                <div class="text-muted">{{ entry.text|striptags|truncatewords:40 }}</div>
+                {% if entry.tags.all %}
+                    <div class="mt-2 d-flex flex-wrap gap-1">
+                        {% for t in entry.tags.all %}
+                            <a href="{% url 'learning_logs:entries_by_tag' t.id %}"
+                               class="badge bg-light text-primary border text-decoration-none">
+                                #{{ t.name }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-light border">No entries with this tag.</div>
+{% endif %}
+
+<a href="{% url 'learning_logs:tags_list' %}" class="btn btn-link mt-3">&larr; All tags</a>
+
+{% endblock content %}
