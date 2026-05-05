@@ -42,4 +42,7 @@ urlpatterns = [
 
     # Registration page.
     path('register/', views.register, name='register'),
+
+    # Profile page.
+    path('profile/', views.profile, name='profile'),
 ]

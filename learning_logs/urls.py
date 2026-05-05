@@ -36,4 +36,7 @@ urlpatterns = [
 
     # This URL will be used by the new button in the topic view
     path('quiz/<int:topic_id>/', views.topic_quiz, name='topic_quiz'),
+
+    # Search across the user's topics and entries
+    path('search/', views.search, name='search'),
 ]

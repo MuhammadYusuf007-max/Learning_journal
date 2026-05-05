@@ -1,0 +1,77 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <h2>{{ user.username }}'s profile</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Account</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Username</dt>
+                    <dd class="col-sm-8">{{ user.username }}</dd>
+
+                    <dt class="col-sm-4">Email</dt>
+                    <dd class="col-sm-8">
+                        {% if user.email %}{{ user.email }}{% else %}<span class="text-muted">not set</span>{% endif %}
+                    </dd>
+
+                    <dt class="col-sm-4">Joined</dt>
+                    <dd class="col-sm-8">{{ user.date_joined|date:"F j, Y" }}</dd>
+
+                    <dt class="col-sm-4">Last login</dt>
+                    <dd class="col-sm-8">
+                        {% if user.last_login %}{{ user.last_login|date:"F j, Y, g:i a" }}{% else %}<span class="text-muted">never</span>{% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="row g-3">
+            <div class="col-sm-6">
+                <div class="card text-bg-primary shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-1 text-white-50">Topics</h6>
+                        <p class="display-5 mb-0">{{ topic_count }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6">
+                <div class="card text-bg-success shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-1 text-white-50">Entries</h6>
+                        <p class="display-5 mb-0">{{ entry_count }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h5 class="card-title">Most active topics</h5>
+                {% if top_topics %}
+                    <ul class="list-group list-group-flush">
+                        {% for topic in top_topics %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <a href="{% url 'learning_logs:topic' topic.id %}">{{ topic.text }}</a>
+                                <span class="badge bg-primary rounded-pill">{{ topic.num_entries }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0">You haven't added any topics yet.
+                        <a href="{% url 'learning_logs:new_topic' %}">Add your first topic</a>.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

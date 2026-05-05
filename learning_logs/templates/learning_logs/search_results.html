@@ -1,0 +1,62 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <h2>Search results</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<form action="{% url 'learning_logs:search' %}" method="get" class="mb-4">
+    <div class="input-group">
+        <input type="search" name="q" value="{{ query }}" class="form-control" placeholder="Search your topics and entries..." autofocus>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </div>
+</form>
+
+{% if query %}
+    <p class="text-muted">
+        Found <strong>{{ total }}</strong> result{{ total|pluralize }} for
+        &ldquo;<em>{{ query }}</em>&rdquo;.
+    </p>
+
+    {% if topic_results %}
+        <h4 class="mt-4">Topics ({{ topic_results|length }})</h4>
+        <ul class="list-group mb-4">
+            {% for topic in topic_results %}
+                <li class="list-group-item">
+                    <a href="{% url 'learning_logs:topic' topic.id %}">{{ topic.text }}</a>
+                    <small class="text-muted ms-2">{{ topic.date_added|date:"M j, Y" }}</small>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if entry_results %}
+        <h4 class="mt-4">Entries ({{ entry_results|length }})</h4>
+        <ul class="list-group">
+            {% for entry in entry_results %}
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'learning_logs:topic' entry.topic.id %}">
+                            <strong>{{ entry.topic.text }}</strong>
+                        </a>
+                        <small class="text-muted">{{ entry.date_added|date:"M j, Y" }}</small>
+                    </div>
+                    <div class="text-truncate text-muted mt-1">
+                        {{ entry.text|striptags|truncatewords:30 }}
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if total == 0 %}
+        <div class="alert alert-light border">
+            No matches found. Try a different keyword.
+        </div>
+    {% endif %}
+{% else %}
+    <p class="text-muted">Type a keyword above to search across your topics and entries.</p>
+{% endif %}
+
+{% endblock content %}

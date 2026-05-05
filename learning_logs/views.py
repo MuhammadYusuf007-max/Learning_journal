@@ -101,7 +101,7 @@ def topic_summary(request, topic_id):
     
     # Combine entries for the AI
     raw_text = " ".join([striptags(e.text) for e in entries])
-    summary_text = generate_ai_summary(raw_text, is_master=True)
+    summary_text = generate_ai_content(raw_text, mode="master")
 
     export_format = request.GET.get('export')
 
@@ -176,7 +176,7 @@ def new_entry(request, topic_id):
             new_entry.topic = topic
             # Clean text and summarize
             clean_text = striptags(new_entry.text)
-            new_entry.ai_summary = generate_ai_summary(clean_text)
+            new_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
             new_entry.save()
             return redirect('learning_logs:topic', topic_id=topic_id)
     context = {'topic': topic, 'form': form}
@@ -197,7 +197,7 @@ def edit_entry(request, entry_id):
         if form.is_valid():
             edited_entry = form.save(commit=False)
             clean_text = striptags(edited_entry.text)
-            edited_entry.ai_summary = generate_ai_summary(clean_text)
+            edited_entry.ai_summary = generate_ai_content(clean_text, mode="summary")
             edited_entry.save()
             return redirect('learning_logs:topic', topic_id=topic.id)
     context = {'entry': entry, 'topic': topic, 'form': form}
@@ -225,6 +225,36 @@ def delete_topic(request, topic_id):
         topic.delete()
         return redirect('learning_logs:topics')
     return render(request, 'learning_logs/delete_topic.html', {'topic': topic})
+
+@login_required
+def search(request):
+    """Search the current user's topics and entries."""
+    query = request.GET.get('q', '').strip()
+
+    topic_results = []
+    entry_results = []
+
+    if query:
+        topic_results = (
+            Topic.objects
+            .filter(owner=request.user, text__icontains=query)
+            .order_by('-date_added')
+        )
+        entry_results = (
+            Entry.objects
+            .filter(topic__owner=request.user, text__icontains=query)
+            .select_related('topic')
+            .order_by('-date_added')
+        )
+
+    context = {
+        'query': query,
+        'topic_results': topic_results,
+        'entry_results': entry_results,
+        'total': len(topic_results) + len(entry_results),
+    }
+    return render(request, 'learning_logs/search_results.html', context)
+
 
 @login_required
 def topic_quiz(request, topic_id):
