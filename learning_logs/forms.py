@@ -1,6 +1,7 @@
 from django import forms
 
-from .models import Topic, Entry
+from .models import Topic, Entry, Flashcard
+
 
 class TopicForm(forms.ModelForm):
     class Meta:
@@ -8,9 +9,23 @@ class TopicForm(forms.ModelForm):
         fields = ['text']
         labels = {'text': ''}
 
+
 class EntryForm(forms.ModelForm):
     class Meta:
-        model =Entry
+        model = Entry
         fields = ['text']
         labels = {'text': ''}
-        widgets = {'text': forms.Textarea(attrs={'cols': '80', 'rows':'4'})}
+        widgets = {'text': forms.Textarea(attrs={'cols': '80', 'rows': '4'})}
+
+
+class FlashcardForm(forms.ModelForm):
+    class Meta:
+        model = Flashcard
+        fields = ['front', 'back']
+        labels = {
+            'front': 'Question / prompt',
+            'back': 'Answer / explanation',
+        }
+        widgets = {
+            'back': forms.Textarea(attrs={'rows': 3}),
+        }

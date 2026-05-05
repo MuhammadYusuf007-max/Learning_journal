@@ -42,6 +42,10 @@
                 💬 Ask AI
             </a>
 
+            <a href="{% url 'learning_logs:topic_flashcards' topic.id %}" class="btn btn-secondary fw-bold shadow-sm">
+                🃏 Flashcards
+            </a>
+
             <div class="btn-group shadow-sm">
                 <a href="{% url 'learning_logs:topic_quiz' topic.id %}" class="btn btn-warning fw-bold">
                     🧠 Quiz Me

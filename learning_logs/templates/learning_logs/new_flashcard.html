@@ -1,0 +1,27 @@
+{% extends 'learning_logs/base.html' %}
+
+{% load django_bootstrap5 %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic_flashcards' topic.id %}" class="text-decoration-none">Flashcards</a></li>
+            <li class="breadcrumb-item active" aria-current="page">New card</li>
+        </ol>
+    </nav>
+    <h2>+ New flashcard</h2>
+{% endblock page_header %}
+
+{% block content %}
+
+<form method="post" class="card shadow-sm p-4">
+    {% csrf_token %}
+    {% bootstrap_form form %}
+    <div class="d-flex justify-content-between mt-3">
+        <a href="{% url 'learning_logs:topic_flashcards' topic.id %}" class="btn btn-link">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save flashcard</button>
+    </div>
+</form>
+
+{% endblock content %}

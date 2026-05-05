@@ -32,6 +32,30 @@ class Entry(models.Model):
             return preview_text
 
 
+class Flashcard(models.Model):
+    """A study flashcard belonging to a topic. Front = prompt, back = answer."""
+    topic = models.ForeignKey(Topic, on_delete=models.CASCADE, related_name='flashcards')
+    front = models.CharField(max_length=300)
+    back = models.TextField()
+    date_added = models.DateTimeField(auto_now_add=True)
+
+    # Lightweight progress tracking (could be extended to full spaced repetition).
+    times_seen = models.PositiveIntegerField(default=0)
+    times_correct = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['date_added']
+
+    def __str__(self):
+        return self.front[:60]
+
+    @property
+    def accuracy(self):
+        if self.times_seen == 0:
+            return 0
+        return round((self.times_correct / self.times_seen) * 100)
+
+
 class QuizAttempt(models.Model):
     """A single attempt at an AI-generated quiz for a topic."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='quiz_attempts')

@@ -13,8 +13,8 @@ from django.http import Http404, FileResponse, HttpResponse
 from django.template.defaultfilters import striptags
 from django.utils import timezone
 
-from .models import Topic, Entry, QuizAttempt
-from .forms import TopicForm, EntryForm
+from .models import Topic, Entry, QuizAttempt, Flashcard
+from .forms import TopicForm, EntryForm, FlashcardForm
 
 # Libraries for file export
 from reportlab.pdfgen import canvas
@@ -147,6 +147,62 @@ def generate_ai_quiz_json(notes_text, num_questions=5):
                 'options': [o.strip() for o in opts],
                 'correct_index': ci,
                 'explanation': str(expl).strip(),
+            })
+    return valid
+
+
+def generate_ai_flashcards_json(notes_text, num_cards=8):
+    """
+    Ask the AI for flashcards in JSON form.
+    Returns a list of {"front": str, "back": str} dicts, or [] on failure.
+    """
+    MAX_NOTES_CHARS = 12000
+    if len(notes_text) > MAX_NOTES_CHARS:
+        notes_text = notes_text[:MAX_NOTES_CHARS]
+
+    system_msg = (
+        "You are a study coach that creates concise flashcards. "
+        "Respond with ONLY a valid JSON array, no prose, no markdown fences. "
+        "Each item must have exactly: front (a short question or prompt, max 200 "
+        "chars) and back (a clear answer, max 500 chars)."
+    )
+    user_msg = (
+        f"Create exactly {num_cards} flashcards based ONLY on the notes below. "
+        f"Cover the most important concepts. Make 'front' a question or term, "
+        f"and 'back' the answer or definition.\n\n"
+        f"NOTES:\n{notes_text}\n\n"
+        f"Return JSON only."
+    )
+
+    raw = _call_ai(system_msg, user_msg)
+    if not raw or raw.startswith("AI features disabled"):
+        return []
+
+    cleaned = raw.strip()
+    fence_match = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    if not cleaned.startswith('['):
+        bracket_match = re.search(r"\[\s*\{.*\}\s*\]", cleaned, re.DOTALL)
+        if bracket_match:
+            cleaned = bracket_match.group(0)
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        print(f"Flashcard JSON parse error: {e}\nRaw: {raw[:500]}")
+        return []
+
+    valid = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        front = item.get('front')
+        back = item.get('back')
+        if isinstance(front, str) and front.strip() and isinstance(back, str) and back.strip():
+            valid.append({
+                'front': front.strip()[:300],
+                'back': back.strip()[:2000],
             })
     return valid
 
@@ -346,6 +402,125 @@ def delete_topic(request, topic_id):
         messages.success(request, f'Topic "{topic_name}" deleted.')
         return redirect('learning_logs:topics')
     return render(request, 'learning_logs/delete_topic.html', {'topic': topic})
+
+@login_required
+def topic_flashcards(request, topic_id):
+    """List a topic's flashcards with management actions."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+    cards = topic.flashcards.all()
+    return render(request, 'learning_logs/flashcards_list.html', {
+        'topic': topic,
+        'cards': cards,
+    })
+
+
+@login_required
+def generate_flashcards(request, topic_id):
+    """POST endpoint that uses the AI to generate flashcards for the topic."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+
+    if request.method != 'POST':
+        return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+    entries = topic.entry_set.all()
+    if not entries.exists():
+        messages.warning(request, 'Add at least one entry before generating flashcards.')
+        return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+    raw_text = " ".join(striptags(e.text) for e in entries)
+    cards_data = generate_ai_flashcards_json(raw_text, num_cards=8)
+
+    if not cards_data:
+        messages.error(request, "Couldn't generate flashcards right now. Please try again in a moment.")
+        return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+    Flashcard.objects.bulk_create([
+        Flashcard(topic=topic, front=c['front'], back=c['back'])
+        for c in cards_data
+    ])
+    messages.success(request, f'Generated {len(cards_data)} flashcards.')
+    return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+
+@login_required
+def new_flashcard(request, topic_id):
+    """Manually add a single flashcard."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+
+    if request.method != 'POST':
+        form = FlashcardForm()
+    else:
+        form = FlashcardForm(data=request.POST)
+        if form.is_valid():
+            card = form.save(commit=False)
+            card.topic = topic
+            card.save()
+            messages.success(request, 'Flashcard added.')
+            return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+    return render(request, 'learning_logs/new_flashcard.html', {
+        'topic': topic,
+        'form': form,
+    })
+
+
+@login_required
+def delete_flashcard(request, card_id):
+    """Delete a single flashcard (must be owned by current user)."""
+    card = get_object_or_404(Flashcard, id=card_id, topic__owner=request.user)
+    topic_id = card.topic.id
+    if request.method == 'POST':
+        card.delete()
+        messages.success(request, 'Flashcard deleted.')
+    return redirect('learning_logs:topic_flashcards', topic_id=topic_id)
+
+
+@login_required
+def review_flashcards(request, topic_id):
+    """One-card-at-a-time review session. Tracks 'got it' / 'study again'."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+    cards = list(topic.flashcards.all())
+
+    if not cards:
+        messages.warning(request, 'Add or generate some flashcards first.')
+        return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+
+    session_key = f'flashcard_session_{topic_id}'
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        card_id = request.POST.get('card_id')
+        if card_id and action in ('correct', 'incorrect'):
+            try:
+                card = Flashcard.objects.get(id=int(card_id), topic=topic)
+                card.times_seen += 1
+                if action == 'correct':
+                    card.times_correct += 1
+                card.save()
+            except (Flashcard.DoesNotExist, ValueError):
+                pass
+
+        # Advance the index in the session.
+        idx = request.session.get(session_key, 0) + 1
+        request.session[session_key] = idx
+
+        if idx >= len(cards):
+            request.session[session_key] = 0
+            return redirect('learning_logs:topic_flashcards', topic_id=topic.id)
+        return redirect('learning_logs:review_flashcards', topic_id=topic.id)
+
+    idx = request.session.get(session_key, 0)
+    if idx >= len(cards):
+        idx = 0
+        request.session[session_key] = 0
+
+    return render(request, 'learning_logs/review_flashcards.html', {
+        'topic': topic,
+        'card': cards[idx],
+        'index': idx + 1,
+        'total': len(cards),
+    })
+
 
 @login_required
 def topic_qa(request, topic_id):

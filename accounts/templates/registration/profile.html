@@ -74,4 +74,94 @@
     </div>
 </div>
 
+<hr class="my-4">
+
+<h4 class="mb-3">🧠 Quiz performance</h4>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-3">
+        <div class="card text-bg-warning shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-1 text-white-75">Quizzes taken</h6>
+                <p class="display-5 mb-0">{{ quiz_count }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-3">
+        <div class="card text-bg-success shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-1 text-white-50">Total points</h6>
+                <p class="display-5 mb-0">{{ quiz_points }}</p>
+                {% if quiz_total_questions %}
+                    <small class="text-white-50">out of {{ quiz_total_questions }}</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-3">
+        <div class="card text-bg-primary shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-1 text-white-50">Best score</h6>
+                <p class="display-5 mb-0">{{ quiz_best }}%</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-3">
+        <div class="card text-bg-info shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-1 text-white-50">Average</h6>
+                <p class="display-5 mb-0">{{ quiz_avg }}%</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if recent_attempts %}
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">Recent quiz attempts</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Topic</th>
+                            <th>Score</th>
+                            <th>%</th>
+                            <th class="text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in recent_attempts %}
+                            <tr>
+                                <td class="small text-muted">{{ a.completed_at|date:"M j, g:i a" }}</td>
+                                <td>
+                                    <a href="{% url 'learning_logs:topic' a.topic.id %}">{{ a.topic.text }}</a>
+                                </td>
+                                <td>{{ a.score }} / {{ a.total }}</td>
+                                <td>
+                                    <span class="badge
+                                        {% if a.percentage >= 80 %}bg-success
+                                        {% elif a.percentage >= 50 %}bg-warning text-dark
+                                        {% else %}bg-danger{% endif %}">
+                                        {{ a.percentage }}%
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'learning_logs:quiz_result' a.id %}" class="btn btn-sm btn-outline-primary">Review</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-light border">
+        You haven't completed any quizzes yet.
+        Pick a topic and try the <strong>🧠 Quiz Me</strong> button to see your stats here.
+    </div>
+{% endif %}
+
 {% endblock content %}

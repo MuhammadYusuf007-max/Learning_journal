@@ -1,0 +1,67 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topics' %}" class="text-decoration-none">Topics</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Flashcards</li>
+        </ol>
+    </nav>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h2 class="mb-0">🃏 Flashcards: <span class="text-primary">{{ topic.text }}</span></h2>
+        <div class="d-flex gap-2">
+            <a href="{% url 'learning_logs:new_flashcard' topic.id %}" class="btn btn-success">+ Add card</a>
+            <form method="post" action="{% url 'learning_logs:generate_flashcards' topic.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-info text-white" title="AI generates 8 cards from your entries">
+                    🤖 AI generate
+                </button>
+            </form>
+            {% if cards %}
+                <a href="{% url 'learning_logs:review_flashcards' topic.id %}" class="btn btn-warning fw-bold">▶️ Review</a>
+            {% endif %}
+        </div>
+    </div>
+{% endblock page_header %}
+
+{% block content %}
+
+{% if cards %}
+    <p class="text-muted small">{{ cards|length }} card{{ cards|length|pluralize }} in this deck.</p>
+
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+        {% for card in cards %}
+            <div class="col">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <p class="fw-bold mb-2">{{ card.front }}</p>
+                        <p class="text-muted small mb-3">{{ card.back|truncatewords:30 }}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                Seen {{ card.times_seen }} &middot; Accuracy {{ card.accuracy }}%
+                            </small>
+                            <form method="post" action="{% url 'learning_logs:delete_flashcard' card.id %}"
+                                  onsubmit="return confirm('Delete this flashcard?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-light border text-center p-5">
+        <p class="fs-5 text-muted mb-3">No flashcards yet for this topic.</p>
+        <p class="small mb-3">Generate them from your notes with one click, or add your own.</p>
+        <form method="post" action="{% url 'learning_logs:generate_flashcards' topic.id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-info text-white">🤖 AI generate from my notes</button>
+        </form>
+        <a href="{% url 'learning_logs:new_flashcard' topic.id %}" class="btn btn-outline-secondary">+ Add manually</a>
+    </div>
+{% endif %}
+
+{% endblock content %}

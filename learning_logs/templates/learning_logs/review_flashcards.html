@@ -1,0 +1,66 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block page_header %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic' topic.id %}" class="text-decoration-none">{{ topic.text }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'learning_logs:topic_flashcards' topic.id %}" class="text-decoration-none">Flashcards</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Review</li>
+        </ol>
+    </nav>
+    <h2>▶️ Review: <span class="text-primary">{{ topic.text }}</span></h2>
+    <p class="text-muted small mb-0">Card {{ index }} of {{ total }}</p>
+{% endblock page_header %}
+
+{% block content %}
+
+<style>
+    .flip-card { perspective: 1200px; cursor: pointer; min-height: 280px; }
+    .flip-inner { position: relative; width: 100%; min-height: 280px; transition: transform 0.6s; transform-style: preserve-3d; }
+    .flip-card.flipped .flip-inner { transform: rotateY(180deg); }
+    .flip-face {
+        position: absolute; inset: 0; backface-visibility: hidden;
+        display: flex; align-items: center; justify-content: center;
+        padding: 2rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        font-size: 1.4rem; text-align: center;
+    }
+    .flip-face.front { background: linear-gradient(135deg, #0d6efd, #6610f2); color: white; }
+    .flip-face.back  { background: #fff; color: #212529; transform: rotateY(180deg); border: 1px solid #dee2e6; }
+</style>
+
+<div class="progress mb-4" style="height: 8px;">
+    <div class="progress-bar bg-info" role="progressbar"
+         style="width: {% widthratio index total 100 %}%"
+         aria-valuenow="{{ index }}" aria-valuemin="0" aria-valuemax="{{ total }}"></div>
+</div>
+
+<div class="flip-card mb-4" id="flipCard" onclick="document.getElementById('flipCard').classList.toggle('flipped')">
+    <div class="flip-inner">
+        <div class="flip-face front">
+            <div>
+                <div class="small text-white-50 mb-2">Click to flip</div>
+                {{ card.front }}
+            </div>
+        </div>
+        <div class="flip-face back">
+            <div>{{ card.back|linebreaksbr }}</div>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="{% url 'learning_logs:review_flashcards' topic.id %}" class="d-flex gap-2 justify-content-center">
+    {% csrf_token %}
+    <input type="hidden" name="card_id" value="{{ card.id }}">
+    <button type="submit" name="action" value="incorrect" class="btn btn-outline-danger btn-lg flex-fill" style="max-width: 220px;">
+        ✗ Study again
+    </button>
+    <button type="submit" name="action" value="correct" class="btn btn-success btn-lg flex-fill" style="max-width: 220px;">
+        ✓ Got it
+    </button>
+</form>
+
+<div class="text-center mt-3">
+    <a href="{% url 'learning_logs:topic_flashcards' topic.id %}" class="btn btn-link">End session</a>
+</div>
+
+{% endblock content %}
