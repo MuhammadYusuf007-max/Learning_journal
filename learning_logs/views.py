@@ -24,30 +24,33 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1"
 )
 
-def generate_ai_summary(text, is_master=False):
+def generate_ai_content(text, mode="summary"):
     """
-    Helper to talk to Groq. 
-    If is_master is True, it provides a longer 3-paragraph summary.
-    If False, it provides a 1-sentence takeaway.
+    Refined AI helper to handle different tasks.
+    Modes: 'summary', 'master', 'quiz'
     """
-    system_prompt = "You are a helpful academic assistant."
-    user_prompt = f"Summarize this journal entry in exactly one short sentence: {text}"
-    
-    if is_master:
-        user_prompt = f"Provide a cohesive 3-paragraph summary of the following learning progress: {text}"
+    if mode == "quiz":
+        system_msg = "You are a demanding university professor."
+        user_msg = f"Based on the following notes, generate 5 challenging multiple-choice or open-ended study questions. Do not provide answers, just the questions. Notes: {text}"
+    elif mode == "master":
+        system_msg = "You are a helpful academic assistant."
+        user_msg = f"Provide a cohesive 3-paragraph summary of this learning progress: {text}"
+    else:
+        system_msg = "You are a helpful assistant."
+        user_msg = f"Summarize this in one short sentence: {text}"
 
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ]
         )
         return response.choices[0].message.content
     except Exception as e:
         print(f"AI Error: {e}")
-        return "Summary temporarily unavailable."
+        return "Content unavailable at this time."
 
 # --- VIEWS ---
 
@@ -202,3 +205,20 @@ def delete_topic(request, topic_id):
         topic.delete()
         return redirect('learning_logs:topics')
     return render(request, 'learning_logs/delete_topic.html', {'topic': topic})
+
+@login_required
+def topic_quiz(request, topic_id):
+    """Generates ONLY a quiz based on the topic entries."""
+    topic = get_object_or_404(Topic, id=topic_id, owner=request.user)
+    entries = topic.entry_set.all()
+    
+    # Combine entries and strip HTML
+    raw_text = " ".join([striptags(e.text) for e in entries])
+    
+    # Call the AI specifically for a Quiz
+    quiz_questions = generate_ai_content(raw_text, mode="quiz")
+
+    return render(request, 'learning_logs/topic_quiz.html', {
+        'topic': topic,
+        'quiz': quiz_questions
+    })

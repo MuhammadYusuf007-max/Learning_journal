@@ -33,4 +33,7 @@ urlpatterns = [
     # --- NEW: AI Topic Summary & Export ---
     # This path handles the web view AND the PDF/DOCX downloads via query parameters
     path('summary/<int:topic_id>/', views.topic_summary, name='topic_summary'),
+
+    # This URL will be used by the new button in the topic view
+    path('quiz/<int:topic_id>/', views.topic_quiz, name='topic_quiz'),
 ]

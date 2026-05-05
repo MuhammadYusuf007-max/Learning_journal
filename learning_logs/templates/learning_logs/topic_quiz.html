@@ -1,0 +1,35 @@
+{% extends 'learning_logs/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card border-warning shadow-lg">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h2 class="h4 mb-0 fw-bold">📝 Knowledge Test: {{ topic.text }}</h2>
+                    <span class="badge bg-dark">AI-Generated</span>
+                </div>
+                <div class="card-body bg-white p-5">
+                    <div class="quiz-area">
+                        <div class="lh-lg fs-5 text-secondary">
+                            {{ quiz|linebreaks }}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light d-flex justify-content-between py-3">
+                    <a href="{% url 'learning_logs:topic' topic.id %}" class="btn btn-outline-secondary">
+                        ← Return to Entries
+                    </a>
+                    <button onclick="window.print()" class="btn btn-dark">
+                        🖨️ Print Quiz
+                    </button>
+                </div>
+            </div>
+            
+            <p class="text-center text-muted mt-4 small">
+                Tip: Try to answer these without looking at your notes for better retention!
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock content %}
